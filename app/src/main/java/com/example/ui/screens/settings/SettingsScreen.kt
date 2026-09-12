@@ -37,6 +37,7 @@ fun SettingsScreen(
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val settings by viewModel.settings.collectAsStateWithLifecycle()
+    val currentUser by viewModel.currentUser.collectAsStateWithLifecycle()
 
     var storeName by remember(settings) { mutableStateOf(settings?.storeName ?: "") }
     var ownerName by remember(settings) { mutableStateOf(settings?.ownerName ?: "") }
@@ -77,6 +78,28 @@ fun SettingsScreen(
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
+            if (!currentUser.canManageSettings) {
+                Card(
+                    shape = RoundedCornerShape(10.dp),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.5f)),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Row(
+                        modifier = Modifier.padding(12.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(Icons.Default.Lock, contentDescription = null, tint = MaterialTheme.colorScheme.error)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "حسابك الحالي (${currentUser.fullName}) في وضع القراءة فقط للإعدادات العامة.",
+                            color = MaterialTheme.colorScheme.error,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                }
+            }
+
             // Store Profile Section
             Text(text = "بيانات المتجر والمنشأة", fontWeight = FontWeight.Bold, fontSize = 14.sp)
 
@@ -175,12 +198,13 @@ fun SettingsScreen(
                     )
                     viewModel.saveStoreSettings(updated)
                 },
+                enabled = currentUser.canManageSettings,
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(8.dp)
             ) {
                 Icon(Icons.Default.Save, contentDescription = null)
                 Spacer(modifier = Modifier.width(6.dp))
-                Text("حفظ التعديلات")
+                Text(if (currentUser.canManageSettings) "حفظ التعديلات" else "حفظ التعديلات (غير مصرح)")
             }
 
             // Manage Currency Exchange Rates
@@ -220,7 +244,58 @@ fun SettingsScreen(
             HorizontalDivider()
 
             // Security & PIN
-            Text(text = "الأمان وحماية التطبيق", fontWeight = FontWeight.Bold, fontSize = 14.sp)
+            Text(text = "المستخدمين والأمان وحماية التطبيق", fontWeight = FontWeight.Bold, fontSize = 14.sp)
+
+            // Users & Permissions Management Link
+            Card(
+                shape = RoundedCornerShape(10.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                elevation = CardDefaults.cardElevation(1.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable {
+                        if (currentUser.canManageUsers) {
+                            onNavigateTo(Screen.Users.route)
+                        } else {
+                            viewModel.showMessage("عذراً، صلاحية إدارة المستخدمين والموظفين متاحة للمدير فقط")
+                        }
+                    }
+            ) {
+                Row(
+                    modifier = Modifier.padding(14.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Row(modifier = Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            if (currentUser.canManageUsers) Icons.Default.ManageAccounts else Icons.Default.Lock,
+                            contentDescription = null,
+                            tint = if (currentUser.canManageUsers) Color(0xFF673AB7) else MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Spacer(modifier = Modifier.width(10.dp))
+                        Column {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text(text = "إدارة المستخدمين والموظفين والصلاحيات", fontWeight = FontWeight.Bold)
+                                if (!currentUser.canManageUsers) {
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Surface(
+                                        shape = RoundedCornerShape(4.dp),
+                                        color = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.5f)
+                                    ) {
+                                        Text("مقفل", fontSize = 10.sp, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp))
+                                    }
+                                }
+                            }
+                            Text(
+                                text = if (currentUser.canManageUsers) "إنشاء حسابات المدراء والكاشير والمحاسبين وتخصيص صلاحيات كل موظف" else "متاحة لحساب المدير فقط",
+                                fontSize = 11.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                    Icon(Icons.Default.ChevronLeft, contentDescription = null)
+                }
+            }
 
             Card(
                 shape = RoundedCornerShape(10.dp),

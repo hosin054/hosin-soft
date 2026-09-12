@@ -32,6 +32,7 @@ fun CurrenciesScreen(
 ) {
     val settings by viewModel.settings.collectAsStateWithLifecycle()
     val currencies by viewModel.allCurrencyRates.collectAsStateWithLifecycle()
+    val currentUser by viewModel.currentUser.collectAsStateWithLifecycle()
 
     var showAddDialog by remember { mutableStateOf(false) }
     var currencyToEdit by remember { mutableStateOf<CurrencyRate?>(null) }
@@ -71,12 +72,14 @@ fun CurrenciesScreen(
                     }
                 },
                 actions = {
-                    IconButton(onClick = { viewModel.resetCurrenciesToDefault() }) {
-                        Icon(
-                            Icons.Default.Restore,
-                            contentDescription = "استعادة الافتراضي",
-                            tint = MaterialTheme.colorScheme.onPrimary
-                        )
+                    if (currentUser.canManageSettings) {
+                        IconButton(onClick = { viewModel.resetCurrenciesToDefault() }) {
+                            Icon(
+                                Icons.Default.Restore,
+                                contentDescription = "استعادة الافتراضي",
+                                tint = MaterialTheme.colorScheme.onPrimary
+                            )
+                        }
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
@@ -86,14 +89,16 @@ fun CurrenciesScreen(
             )
         },
         floatingActionButton = {
-            FloatingActionButton(
-                onClick = {
-                    currencyToEdit = null
-                    showAddDialog = true
-                },
-                containerColor = MaterialTheme.colorScheme.primary
-            ) {
-                Icon(Icons.Default.Add, contentDescription = "إضافة عملة جديدة")
+            if (currentUser.canManageSettings) {
+                FloatingActionButton(
+                    onClick = {
+                        currencyToEdit = null
+                        showAddDialog = true
+                    },
+                    containerColor = MaterialTheme.colorScheme.primary
+                ) {
+                    Icon(Icons.Default.Add, contentDescription = "إضافة عملة جديدة")
+                }
             }
         }
     ) { innerPadding ->
@@ -308,6 +313,7 @@ fun CurrenciesScreen(
                 CurrencyCard(
                     currency = currency,
                     baseCurrency = baseCurrency,
+                    canManage = currentUser.canManageSettings,
                     onEdit = {
                         currencyToEdit = currency
                         showAddDialog = true
@@ -477,6 +483,7 @@ fun CurrenciesScreen(
 fun CurrencyCard(
     currency: CurrencyRate,
     baseCurrency: CurrencyRate?,
+    canManage: Boolean = true,
     onEdit: () -> Unit,
     onDelete: () -> Unit,
     onSetBase: () -> Unit
@@ -496,7 +503,7 @@ fun CurrencyCard(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
+                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
                     Surface(
                         shape = RoundedCornerShape(8.dp),
                         color = if (currency.isBase) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant,
@@ -543,13 +550,15 @@ fun CurrencyCard(
                     }
                 }
 
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    IconButton(onClick = onEdit) {
-                        Icon(Icons.Default.Edit, contentDescription = "تعديل", tint = MaterialTheme.colorScheme.primary)
-                    }
-                    if (!currency.isBase) {
-                        IconButton(onClick = onDelete) {
-                            Icon(Icons.Default.Delete, contentDescription = "حذف", tint = MaterialTheme.colorScheme.error)
+                if (canManage) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        IconButton(onClick = onEdit) {
+                            Icon(Icons.Default.Edit, contentDescription = "تعديل", tint = MaterialTheme.colorScheme.primary)
+                        }
+                        if (!currency.isBase) {
+                            IconButton(onClick = onDelete) {
+                                Icon(Icons.Default.Delete, contentDescription = "حذف", tint = MaterialTheme.colorScheme.error)
+                            }
                         }
                     }
                 }
@@ -571,8 +580,10 @@ fun CurrencyCard(
                         fontSize = 11.sp,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
-                    TextButton(onClick = onSetBase) {
-                        Text("جعلها أساسية", fontSize = 11.sp)
+                    if (canManage) {
+                        TextButton(onClick = onSetBase) {
+                            Text("جعلها أساسية", fontSize = 11.sp)
+                        }
                     }
                 }
             }

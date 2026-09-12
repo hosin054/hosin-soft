@@ -36,6 +36,7 @@ import com.example.ui.screens.settings.AuditLogsScreen
 import com.example.ui.screens.settings.CurrenciesScreen
 import com.example.ui.screens.settings.SettingsScreen
 import com.example.ui.screens.setup.SetupScreen
+import com.example.ui.screens.users.UsersScreen
 import com.example.ui.screens.vouchers.VouchersScreen
 
 sealed class BottomNavItem(val route: String, val title: String, val icon: ImageVector) {
@@ -294,6 +295,13 @@ fun AppNavigation(viewModel: MainViewModel) {
 
             composable(Screen.Currencies.route) {
                 CurrenciesScreen(
+                    viewModel = viewModel,
+                    onBack = { navController.popBackStack() }
+                )
+            }
+
+            composable(Screen.Users.route) {
+                UsersScreen(
                     viewModel = viewModel,
                     onBack = { navController.popBackStack() }
                 )

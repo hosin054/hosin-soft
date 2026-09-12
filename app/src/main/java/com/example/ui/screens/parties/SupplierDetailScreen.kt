@@ -36,6 +36,7 @@ fun SupplierDetailScreen(
     val allSuppliers by viewModel.allSuppliers.collectAsStateWithLifecycle()
     val allInvoices by viewModel.allInvoices.collectAsStateWithLifecycle()
     val allVouchers by viewModel.allVouchers.collectAsStateWithLifecycle()
+    val currentUser by viewModel.currentUser.collectAsStateWithLifecycle()
 
     val supplier = allSuppliers.find { it.id == supplierId }
     val supplierPurchases = allInvoices.filter { it.partyId == supplierId && it.invoiceType == "PURCHASE" }
@@ -128,12 +129,13 @@ fun SupplierDetailScreen(
 
                             Button(
                                 onClick = { showPayDialog = true },
+                                enabled = currentUser.canManageSuppliers,
                                 modifier = Modifier.fillMaxWidth(),
                                 shape = RoundedCornerShape(8.dp)
                             ) {
                                 Icon(Icons.Default.Payments, contentDescription = null)
                                 Spacer(modifier = Modifier.width(6.dp))
-                                Text("تسجيل سند صرف دفعة للمورد")
+                                Text(if (currentUser.canManageSuppliers) "تسجيل سند صرف دفعة للمورد" else "تسجيل سند صرف (غير مصرح)")
                             }
                         }
                     }

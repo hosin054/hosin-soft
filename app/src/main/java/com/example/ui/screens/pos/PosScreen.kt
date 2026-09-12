@@ -41,6 +41,7 @@ fun PosScreen(
     val discount by viewModel.posDiscount.collectAsStateWithLifecycle()
     val tax by viewModel.posTax.collectAsStateWithLifecycle()
     val currencyRates by viewModel.allCurrencyRates.collectAsStateWithLifecycle()
+    val currentUser by viewModel.currentUser.collectAsStateWithLifecycle()
 
     var searchQuery by remember { mutableStateOf("") }
     var showBarcodeScanner by remember { mutableStateOf(false) }
@@ -112,7 +113,14 @@ fun PosScreen(
                         }
                         Spacer(modifier = Modifier.height(10.dp))
                         Button(
-                            onClick = { showCheckoutDialog = true },
+                            onClick = {
+                                if (currentUser.canSell) {
+                                    showCheckoutDialog = true
+                                } else {
+                                    viewModel.showMessage("حسابك الحالي لا يمتلك صلاحية إجراء المبيعات")
+                                }
+                            },
+                            enabled = currentUser.canSell,
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .height(50.dp),
@@ -120,7 +128,11 @@ fun PosScreen(
                         ) {
                             Icon(Icons.Default.CheckCircle, contentDescription = null)
                             Spacer(modifier = Modifier.width(8.dp))
-                            Text("متابعة الدفع وحفظ الفاتورة", fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                            Text(
+                                if (currentUser.canSell) "متابعة الدفع وحفظ الفاتورة" else "متابعة الدفع (صلاحية مبيعات غير مفعلة)",
+                                fontSize = 15.sp,
+                                fontWeight = FontWeight.Bold
+                            )
                         }
                     }
                 }
@@ -133,6 +145,28 @@ fun PosScreen(
                 .padding(innerPadding)
                 .padding(12.dp)
         ) {
+            if (!currentUser.canSell) {
+                Card(
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer),
+                    shape = RoundedCornerShape(8.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 8.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.padding(10.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(Icons.Default.Lock, contentDescription = null, tint = MaterialTheme.colorScheme.error)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "تنبيه: حساب المستخدم (${currentUser.fullName}) في وضع العرض فقط ولا يمتلك صلاحية إجراء عمليات البيع.",
+                            fontSize = 12.sp,
+                            color = MaterialTheme.colorScheme.onErrorContainer
+                        )
+                    }
+                }
+            }
             // Search & Barcode row
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -684,16 +718,17 @@ fun PosScreen(
 
                     // Additional Discount & Notes
                     item {
-                        OutlinedTextField(
-                            value = discountInput,
-                            onValueChange = { discountInput = it },
-                            label = { Text("الخصم الإضافي (${settings?.currencySymbol ?: "ر.س"})") },
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                            singleLine = true,
-                            modifier = Modifier.fillMaxWidth()
-                        )
-
-                        Spacer(modifier = Modifier.height(8.dp))
+                        if (currentUser.canGiveDiscount) {
+                            OutlinedTextField(
+                                value = discountInput,
+                                onValueChange = { discountInput = it },
+                                label = { Text("الخصم الإضافي (${settings?.currencySymbol ?: "ر.س"})") },
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                                singleLine = true,
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                            Spacer(modifier = Modifier.height(8.dp))
+                        }
 
                         OutlinedTextField(
                             value = notesInput,

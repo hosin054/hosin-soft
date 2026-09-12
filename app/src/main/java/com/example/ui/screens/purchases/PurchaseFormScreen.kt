@@ -37,19 +37,49 @@ fun PurchaseFormScreen(
     val suppliers by viewModel.allSuppliers.collectAsStateWithLifecycle()
     val purchaseItems by viewModel.purchaseItems.collectAsStateWithLifecycle()
     val selectedSupplier by viewModel.selectedSupplier.collectAsStateWithLifecycle()
+    val currencyRates by viewModel.allCurrencyRates.collectAsStateWithLifecycle()
+    val currentUser by viewModel.currentUser.collectAsStateWithLifecycle()
 
     var referenceNumber by remember { mutableStateOf("") }
     var notes by remember { mutableStateOf("") }
     var paymentType by remember { mutableStateOf(if (selectedSupplier != null) "CREDIT" else "CASH") }
+    var paymentMethod by remember { mutableStateOf(if (paymentType == "CREDIT") "آجل" else "كاش") }
+
+    // Currency selection
+    val baseCurrency = remember(currencyRates) {
+        currencyRates.find { it.isBase } ?: currencyRates.firstOrNull()
+    }
+    var selectedCurrencyId by remember {
+        mutableStateOf(baseCurrency?.id ?: currencyRates.firstOrNull()?.id)
+    }
+    val chosenCurrency = remember(currencyRates, selectedCurrencyId) {
+        currencyRates.find { it.id == selectedCurrencyId } ?: baseCurrency ?: com.example.data.model.CurrencyRate(
+            code = "SAR", name = "ريال سعودي", symbol = settings?.currencySymbol ?: "ر.س", rateToBase = 1.0, isBase = true
+        )
+    }
+
+    var customExchangeRateInput by remember(chosenCurrency) {
+        mutableStateOf(String.format(java.util.Locale.ENGLISH, "%.4f", chosenCurrency.rateToBase))
+    }
+    val effectiveRate = customExchangeRateInput.toDoubleOrNull() ?: chosenCurrency.rateToBase
 
     var showSupplierPicker by remember { mutableStateOf(false) }
     var showProductPicker by remember { mutableStateOf(false) }
     var showBarcodeScanner by remember { mutableStateOf(false) }
 
     val totalAmount = purchaseItems.sumOf { it.total }
-    var paidAmountInput by remember(totalAmount, paymentType) {
-        mutableStateOf(if (paymentType == "CASH") String.format(java.util.Locale.ENGLISH, "%.2f", totalAmount) else "0.0")
+    val requiredInChosenCurrency = if (effectiveRate > 0) totalAmount / effectiveRate else totalAmount
+
+    var paidAmountInput by remember(totalAmount, paymentType, chosenCurrency) {
+        mutableStateOf(
+            if (paymentType == "CASH") String.format(java.util.Locale.ENGLISH, "%.2f", requiredInChosenCurrency)
+            else "0.0"
+        )
     }
+
+    val paidInChosenCurrency = paidAmountInput.toDoubleOrNull() ?: 0.0
+    val paidInBase = paidInChosenCurrency * effectiveRate
+    val finalPaidInBase = if (paymentType == "CASH") totalAmount else paidInBase
 
     Scaffold(
         topBar = {
@@ -89,17 +119,26 @@ fun PurchaseFormScreen(
                         Spacer(modifier = Modifier.height(10.dp))
                         Button(
                             onClick = {
-                                val paid = if (paymentType == "CASH") totalAmount else (paidAmountInput.toDoubleOrNull() ?: 0.0)
-                                viewModel.completePurchase(
-                                    paymentType = paymentType,
-                                    paidAmount = paid,
-                                    referenceNumber = referenceNumber.trim(),
-                                    notes = notes.trim(),
-                                    onSuccess = { invId ->
-                                        onInvoiceCreated(invId)
-                                    }
-                                )
+                                if (currentUser.canPurchase) {
+                                    val paid = if (paymentType == "CASH") totalAmount else finalPaidInBase
+                                    viewModel.completePurchase(
+                                        paymentType = paymentType,
+                                        paymentMethod = paymentMethod,
+                                        paidCurrency = chosenCurrency.name,
+                                        paidCurrencyAmount = paidInChosenCurrency,
+                                        exchangeRate = effectiveRate,
+                                        paidAmount = paid,
+                                        referenceNumber = referenceNumber.trim(),
+                                        notes = notes.trim(),
+                                        onSuccess = { invId ->
+                                            onInvoiceCreated(invId)
+                                        }
+                                    )
+                                } else {
+                                    viewModel.showMessage("حسابك لا يمتلك صلاحية إجراء فواتير الشراء")
+                                }
                             },
+                            enabled = currentUser.canPurchase && (paymentType == "CASH" || selectedSupplier != null),
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .height(50.dp),
@@ -107,7 +146,11 @@ fun PurchaseFormScreen(
                         ) {
                             Icon(Icons.Default.Save, contentDescription = null)
                             Spacer(modifier = Modifier.width(8.dp))
-                            Text("حفظ فاتورة الشراء وتحديث المخزون", fontSize = 15.sp, fontWeight = FontWeight.Bold)
+                            Text(
+                                if (currentUser.canPurchase) "حفظ فاتورة الشراء وتحديث المخزون" else "حفظ (غير مصرح بالشراء)",
+                                fontSize = 15.sp,
+                                fontWeight = FontWeight.Bold
+                            )
                         }
                     }
                 }
@@ -120,6 +163,29 @@ fun PurchaseFormScreen(
                 .padding(innerPadding)
                 .padding(14.dp)
         ) {
+            if (!currentUser.canPurchase) {
+                Card(
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer),
+                    shape = RoundedCornerShape(8.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 10.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.padding(10.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(Icons.Default.Lock, contentDescription = null, tint = MaterialTheme.colorScheme.error)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "تنبيه: حسابك الحالي (${currentUser.fullName}) لا يمتلك صلاحية إجراء فواتير مشتريات.",
+                            fontSize = 12.sp,
+                            color = MaterialTheme.colorScheme.onErrorContainer
+                        )
+                    }
+                }
+            }
+
             // Supplier selection
             Row(
                 modifier = Modifier
@@ -175,9 +241,10 @@ fun PurchaseFormScreen(
                     selected = paymentType == "CASH",
                     onClick = {
                         paymentType = "CASH"
-                        paidAmountInput = String.format(java.util.Locale.ENGLISH, "%.2f", totalAmount)
+                        paymentMethod = "كاش"
+                        paidAmountInput = String.format(java.util.Locale.ENGLISH, "%.2f", requiredInChosenCurrency)
                     },
-                    label = { Text("شراء نقدي") },
+                    label = { Text("شراء نقدي / فوري") },
                     modifier = Modifier.weight(1f)
                 )
                 Spacer(modifier = Modifier.width(8.dp))
@@ -185,6 +252,7 @@ fun PurchaseFormScreen(
                     selected = paymentType == "CREDIT",
                     onClick = {
                         paymentType = "CREDIT"
+                        paymentMethod = "آجل"
                         paidAmountInput = "0.0"
                     },
                     label = { Text("شراء آجل (ذمم)") },
@@ -192,12 +260,59 @@ fun PurchaseFormScreen(
                 )
             }
 
+            // Payment Method selector (if cash or partial payment)
+            if (paymentType == "CASH") {
+                Spacer(modifier = Modifier.height(6.dp))
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    listOf("كاش", "شبكة / إلكتروني", "تحويل بنكي").forEach { method ->
+                        FilterChip(
+                            selected = paymentMethod == method,
+                            onClick = { paymentMethod = method },
+                            label = { Text(method, fontSize = 12.sp) }
+                        )
+                    }
+                }
+            }
+
+            // Currency selector if multiple currencies exist
+            if (currencyRates.size > 1) {
+                Spacer(modifier = Modifier.height(8.dp))
+                Text("عملة دفع الفاتورة للمورد:", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    currencyRates.forEach { rate ->
+                        FilterChip(
+                            selected = rate.id == selectedCurrencyId,
+                            onClick = {
+                                selectedCurrencyId = rate.id
+                                customExchangeRateInput = String.format(java.util.Locale.ENGLISH, "%.4f", rate.rateToBase)
+                            },
+                            label = { Text("${rate.symbol} (${rate.name})", fontSize = 11.sp) }
+                        )
+                    }
+                }
+
+                if (!chosenCurrency.isBase) {
+                    Spacer(modifier = Modifier.height(6.dp))
+                    OutlinedTextField(
+                        value = customExchangeRateInput,
+                        onValueChange = { customExchangeRateInput = it },
+                        label = { Text("سعر صرف 1 ${chosenCurrency.symbol} مقابل ${settings?.currencySymbol ?: "ر.س"}") },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            }
+
             if (paymentType == "CREDIT") {
                 Spacer(modifier = Modifier.height(8.dp))
                 OutlinedTextField(
                     value = paidAmountInput,
                     onValueChange = { paidAmountInput = it },
-                    label = { Text("المبلغ المدفوع مقدماً للمورد") },
+                    label = { Text("المبلغ المدفوع مقدماً للمورد (${chosenCurrency.symbol})") },
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()

@@ -36,6 +36,7 @@ fun CustomerDetailScreen(
     val allCustomers by viewModel.allCustomers.collectAsStateWithLifecycle()
     val allInvoices by viewModel.allInvoices.collectAsStateWithLifecycle()
     val allVouchers by viewModel.allVouchers.collectAsStateWithLifecycle()
+    val currentUser by viewModel.currentUser.collectAsStateWithLifecycle()
 
     val customer = allCustomers.find { it.id == customerId }
     val customerInvoices = allInvoices.filter { it.partyId == customerId && it.invoiceType == "SALE" }
@@ -132,12 +133,13 @@ fun CustomerDetailScreen(
 
                             Button(
                                 onClick = { showReceiveDialog = true },
+                                enabled = currentUser.canManageCustomers,
                                 modifier = Modifier.fillMaxWidth(),
                                 shape = RoundedCornerShape(8.dp)
                             ) {
                                 Icon(Icons.Default.Payments, contentDescription = null)
                                 Spacer(modifier = Modifier.width(6.dp))
-                                Text("تسجيل سند قبض دفعة من العميل")
+                                Text(if (currentUser.canManageCustomers) "تسجيل سند قبض دفعة من العميل" else "تسجيل سند قبض (غير مصرح)")
                             }
                         }
                     }

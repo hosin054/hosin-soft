@@ -36,6 +36,7 @@ fun ReportsScreen(
     val customers by viewModel.allCustomers.collectAsStateWithLifecycle()
     val suppliers by viewModel.allSuppliers.collectAsStateWithLifecycle()
     val currencyRates by viewModel.allCurrencyRates.collectAsStateWithLifecycle()
+    val currentUser by viewModel.currentUser.collectAsStateWithLifecycle()
 
     var dateFilter by remember { mutableStateOf(1) } // 0 = Today, 1 = This Month, 2 = This Year, 3 = All
     var showAllCurrenciesOverview by remember { mutableStateOf(false) }
@@ -104,6 +105,66 @@ fun ReportsScreen(
         return "${String.format(Locale.ENGLISH, "%,.2f", converted)} ${curr.symbol}"
     }
 
+    fun toDisplayProfit(amountInBase: Double, curr: CurrencyRate = selectedCurrency): String {
+        if (!currentUser.canViewProfits) return "*** محجوب ***"
+        return toDisplayMoney(amountInBase, curr)
+    }
+
+    if (!currentUser.canViewReports) {
+        Scaffold(
+            topBar = {
+                TopAppBar(
+                    title = { Text("التقارير المالية والأرباح") },
+                    colors = TopAppBarDefaults.topAppBarColors(
+                        containerColor = MaterialTheme.colorScheme.primary,
+                        titleContentColor = MaterialTheme.colorScheme.onPrimary
+                    )
+                )
+            }
+        ) { innerPadding ->
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(innerPadding)
+                    .padding(24.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Card(
+                    shape = RoundedCornerShape(16.dp),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.3f)),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(
+                        modifier = Modifier.padding(24.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Icon(
+                            Icons.Default.Lock,
+                            contentDescription = null,
+                            modifier = Modifier.size(56.dp),
+                            tint = MaterialTheme.colorScheme.error
+                        )
+                        Spacer(modifier = Modifier.height(14.dp))
+                        Text(
+                            text = "عفواً، لا تمتلك صلاحية عرض التقارير",
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 17.sp,
+                            color = MaterialTheme.colorScheme.error
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            text = "حسابك الحالي (${currentUser.fullName} - ${viewModel.getRoleArabicName(currentUser.role)}) غير مصرح له بالاطلاع على التقارير المالية. يرجى مراجعة مسؤول النظام لمنحك الصلاحية.",
+                            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            fontSize = 13.sp
+                        )
+                    }
+                }
+            }
+        }
+        return
+    }
+
     Scaffold(
         topBar = {
             TopAppBar(
@@ -122,9 +183,9 @@ fun ReportsScreen(
                             عملة التقرير: ${selectedCurrency.name} (${selectedCurrency.symbol})
                             ------------------------
                             إجمالي المبيعات: ${toDisplayMoney(totalSalesBase)}
-                            مجمل ربح المبيعات: ${toDisplayMoney(totalProfitGrossBase)}
+                            مجمل ربح المبيعات: ${toDisplayProfit(totalProfitGrossBase)}
                             إجمالي المصروفات: ${toDisplayMoney(totalExpensesBase)}
-                            صافي الربح النهائي: ${toDisplayMoney(netProfitBase)}
+                            صافي الربح النهائي: ${toDisplayProfit(netProfitBase)}
                             ------------------------
                             المقبوض نقداً (كاش): ${toDisplayMoney(cashSalesBase)}
                             المقبوض شبكة/إلكتروني: ${toDisplayMoney(electronicSalesBase)}
@@ -337,10 +398,10 @@ fun ReportsScreen(
                                         modifier = Modifier.weight(1.3f)
                                     )
                                     Text(
-                                        text = toDisplayMoney(netProfitBase, curr),
+                                        text = toDisplayProfit(netProfitBase, curr),
                                         fontSize = 11.sp,
                                         fontWeight = FontWeight.Bold,
-                                        color = if (netProfitBase >= 0) Color(0xFF15803D) else MaterialTheme.colorScheme.error,
+                                        color = if (currentUser.canViewProfits && netProfitBase >= 0) Color(0xFF15803D) else if (currentUser.canViewProfits) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
                                         modifier = Modifier.weight(1.3f)
                                     )
                                 }
@@ -356,7 +417,8 @@ fun ReportsScreen(
                 Card(
                     shape = RoundedCornerShape(14.dp),
                     colors = CardDefaults.cardColors(
-                        containerColor = if (netProfitBase >= 0) Color(0xFF15803D).copy(alpha = 0.12f)
+                        containerColor = if (!currentUser.canViewProfits) MaterialTheme.colorScheme.surfaceVariant
+                        else if (netProfitBase >= 0) Color(0xFF15803D).copy(alpha = 0.12f)
                         else MaterialTheme.colorScheme.error.copy(alpha = 0.12f)
                     ),
                     modifier = Modifier.fillMaxWidth()
@@ -382,18 +444,20 @@ fun ReportsScreen(
                         }
                         Spacer(modifier = Modifier.height(6.dp))
                         Text(
-                            text = toDisplayMoney(netProfitBase),
+                            text = toDisplayProfit(netProfitBase),
                             fontWeight = FontWeight.Bold,
                             fontSize = 26.sp,
-                            color = if (netProfitBase >= 0) Color(0xFF15803D) else MaterialTheme.colorScheme.error
+                            color = if (!currentUser.canViewProfits) MaterialTheme.colorScheme.onSurfaceVariant
+                            else if (netProfitBase >= 0) Color(0xFF15803D)
+                            else MaterialTheme.colorScheme.error
                         )
                         Spacer(modifier = Modifier.height(4.dp))
                         Text(
-                            text = "(مجمل ربح المبيعات: ${toDisplayMoney(totalProfitGrossBase)} - المصروفات: ${toDisplayMoney(totalExpensesBase)})",
+                            text = if (currentUser.canViewProfits) "(مجمل ربح المبيعات: ${toDisplayMoney(totalProfitGrossBase)} - المصروفات: ${toDisplayMoney(totalExpensesBase)})" else "صلاحية مشاهدة الأرباح غير مفعلة لهذا الحساب",
                             fontSize = 11.sp,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
-                        if (!selectedCurrency.isBase) {
+                        if (currentUser.canViewProfits && !selectedCurrency.isBase) {
                             Spacer(modifier = Modifier.height(3.dp))
                             Text(
                                 text = "ما يعادل بالعملة الأساسية للمتجر: ${Formatters.formatMoney(netProfitBase, settings)}",
@@ -475,14 +539,19 @@ fun ReportsScreen(
 
                         ReportRow(title = "إجمالي المبيعات", value = toDisplayMoney(totalSalesBase), isBold = true)
                         ReportRow(title = "عدد فواتير المبيعات", value = "${periodSales.size} فاتورة")
-                        ReportRow(title = "مجمل ربح المبيعات", value = toDisplayMoney(totalProfitGrossBase), color = Color(0xFF15803D))
+                        ReportRow(title = "مجمل ربح المبيعات", value = toDisplayProfit(totalProfitGrossBase), color = if (currentUser.canViewProfits) Color(0xFF15803D) else MaterialTheme.colorScheme.onSurfaceVariant)
                         HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
 
                         ReportRow(title = "إجمالي المصروفات التشغيلية", value = toDisplayMoney(totalExpensesBase), color = MaterialTheme.colorScheme.error)
                         ReportRow(title = "عدد بنود المصروفات", value = "${periodExpenses.size} حركة")
                         HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
 
-                        ReportRow(title = "صافي الربح النهائي", value = toDisplayMoney(netProfitBase), isBold = true, color = if (netProfitBase >= 0) Color(0xFF15803D) else MaterialTheme.colorScheme.error)
+                        ReportRow(
+                            title = "صافي الربح النهائي",
+                            value = toDisplayProfit(netProfitBase),
+                            isBold = true,
+                            color = if (!currentUser.canViewProfits) MaterialTheme.colorScheme.onSurfaceVariant else if (netProfitBase >= 0) Color(0xFF15803D) else MaterialTheme.colorScheme.error
+                        )
                         HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
 
                         ReportRow(title = "إجمالي المشتريات والتوريدات", value = toDisplayMoney(totalPurchasesBase))

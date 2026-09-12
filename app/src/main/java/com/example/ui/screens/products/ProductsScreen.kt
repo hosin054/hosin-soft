@@ -33,6 +33,7 @@ fun ProductsScreen(
 ) {
     val settings by viewModel.settings.collectAsStateWithLifecycle()
     val products by viewModel.allProducts.collectAsStateWithLifecycle()
+    val currentUser by viewModel.currentUser.collectAsStateWithLifecycle()
 
     var searchQuery by remember { mutableStateOf("") }
     var selectedCategory by remember { mutableStateOf<String?>(null) }
@@ -76,12 +77,14 @@ fun ProductsScreen(
             )
         },
         floatingActionButton = {
-            FloatingActionButton(
-                onClick = { onNavigateToForm(0L) },
-                containerColor = MaterialTheme.colorScheme.primary,
-                contentColor = MaterialTheme.colorScheme.onPrimary
-            ) {
-                Icon(Icons.Default.Add, contentDescription = "إضافة منتج")
+            if (currentUser.canManageInventory) {
+                FloatingActionButton(
+                    onClick = { onNavigateToForm(0L) },
+                    containerColor = MaterialTheme.colorScheme.primary,
+                    contentColor = MaterialTheme.colorScheme.onPrimary
+                ) {
+                    Icon(Icons.Default.Add, contentDescription = "إضافة منتج")
+                }
             }
         }
     ) { innerPadding ->
@@ -160,6 +163,8 @@ fun ProductsScreen(
                         ProductCardItem(
                             product = product,
                             settings = settings,
+                            canViewProfits = currentUser.canViewProfits,
+                            canManageInventory = currentUser.canManageInventory,
                             onEdit = { onNavigateToForm(product.id) },
                             onAdjustStock = { productToAdjust = product },
                             onPrintLabel = { onNavigateToBarcodeLabels(product.id) },
@@ -258,6 +263,8 @@ fun ProductsScreen(
 fun ProductCardItem(
     product: Product,
     settings: com.example.data.model.StoreSettings?,
+    canViewProfits: Boolean,
+    canManageInventory: Boolean,
     onEdit: () -> Unit,
     onAdjustStock: () -> Unit,
     onPrintLabel: () -> Unit,
@@ -293,7 +300,7 @@ fun ProductCardItem(
 
                 if (isLow) {
                     AssistChip(
-                        onClick = onAdjustStock,
+                        onClick = { if (canManageInventory) onAdjustStock() },
                         label = { Text("منخفض!", fontSize = 10.sp, color = MaterialTheme.colorScheme.error) },
                         leadingIcon = { Icon(Icons.Default.Warning, contentDescription = null, tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(14.dp)) },
                         colors = AssistChipDefaults.assistChipColors(containerColor = MaterialTheme.colorScheme.errorContainer)
@@ -331,7 +338,7 @@ fun ProductCardItem(
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
                 Text(
-                    text = "الشراء: ${Formatters.formatMoney(product.purchasePrice, settings)}",
+                    text = if (canViewProfits) "الشراء: ${Formatters.formatMoney(product.purchasePrice, settings)}" else "الشراء: *** (محجوب)",
                     fontSize = 12.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -361,18 +368,20 @@ fun ProductCardItem(
                     Spacer(modifier = Modifier.width(4.dp))
                     Text("ملصق سعر", fontSize = 12.sp)
                 }
-                TextButton(onClick = onAdjustStock) {
-                    Icon(Icons.Default.Tune, contentDescription = null, modifier = Modifier.size(16.dp))
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Text("تسوية جرد", fontSize = 12.sp)
-                }
-                TextButton(onClick = onEdit) {
-                    Icon(Icons.Default.Edit, contentDescription = null, modifier = Modifier.size(16.dp))
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Text("تعديل", fontSize = 12.sp)
-                }
-                IconButton(onClick = onDelete, modifier = Modifier.size(32.dp)) {
-                    Icon(Icons.Default.DeleteOutline, contentDescription = "حذف", tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(18.dp))
+                if (canManageInventory) {
+                    TextButton(onClick = onAdjustStock) {
+                        Icon(Icons.Default.Tune, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("تسوية جرد", fontSize = 12.sp)
+                    }
+                    TextButton(onClick = onEdit) {
+                        Icon(Icons.Default.Edit, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("تعديل", fontSize = 12.sp)
+                    }
+                    IconButton(onClick = onDelete, modifier = Modifier.size(32.dp)) {
+                        Icon(Icons.Default.DeleteOutline, contentDescription = "حذف", tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(18.dp))
+                    }
                 }
             }
         }

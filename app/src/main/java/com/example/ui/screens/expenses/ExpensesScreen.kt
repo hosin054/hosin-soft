@@ -30,6 +30,7 @@ fun ExpensesScreen(
 ) {
     val settings by viewModel.settings.collectAsStateWithLifecycle()
     val expenses by viewModel.allExpenses.collectAsStateWithLifecycle()
+    val currentUser by viewModel.currentUser.collectAsStateWithLifecycle()
 
     var showAddDialog by remember { mutableStateOf(false) }
     var selectedCategory by remember { mutableStateOf<String?>(null) }
@@ -52,12 +53,14 @@ fun ExpensesScreen(
             )
         },
         floatingActionButton = {
-            FloatingActionButton(
-                onClick = { showAddDialog = true },
-                containerColor = MaterialTheme.colorScheme.error,
-                contentColor = MaterialTheme.colorScheme.onError
-            ) {
-                Icon(Icons.Default.Add, contentDescription = "إضافة مصروف")
+            if (currentUser.canManageExpenses) {
+                FloatingActionButton(
+                    onClick = { showAddDialog = true },
+                    containerColor = MaterialTheme.colorScheme.error,
+                    contentColor = MaterialTheme.colorScheme.onError
+                ) {
+                    Icon(Icons.Default.Add, contentDescription = "إضافة مصروف")
+                }
             }
         }
     ) { innerPadding ->

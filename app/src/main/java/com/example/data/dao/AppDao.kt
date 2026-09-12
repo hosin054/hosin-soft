@@ -38,6 +38,9 @@ interface AppDao {
     @Update
     suspend fun updateUser(user: User)
 
+    @Delete
+    suspend fun deleteUser(user: User)
+
     // --- Categories ---
     @Query("SELECT * FROM categories ORDER BY name ASC")
     fun getAllCategories(): Flow<List<Category>>

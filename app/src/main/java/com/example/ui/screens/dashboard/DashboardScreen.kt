@@ -21,7 +21,13 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import com.example.data.model.Invoice
+import com.example.data.model.User
 import com.example.ui.MainViewModel
 import com.example.ui.navigation.Screen
 import com.example.ui.util.Formatters
@@ -43,6 +49,13 @@ fun DashboardScreen(
     val expenses by viewModel.allExpenses.collectAsStateWithLifecycle()
     val vouchers by viewModel.allVouchers.collectAsStateWithLifecycle()
     val cashTx by viewModel.allCashTransactions.collectAsStateWithLifecycle()
+    val currentUser by viewModel.currentUser.collectAsStateWithLifecycle()
+    val allUsers by viewModel.allUsers.collectAsStateWithLifecycle()
+
+    var showSwitchUserDialog by remember { mutableStateOf(false) }
+    var targetUserToSwitch by remember { mutableStateOf<User?>(null) }
+    var pinInput by remember { mutableStateOf("") }
+    var pinError by remember { mutableStateOf<String?>(null) }
 
     // Calculate dates
     val cal = Calendar.getInstance()
@@ -111,6 +124,13 @@ fun DashboardScreen(
                     }
                 },
                 actions = {
+                    IconButton(onClick = {
+                        pinError = null
+                        pinInput = ""
+                        showSwitchUserDialog = true
+                    }) {
+                        Icon(Icons.Default.AccountCircle, contentDescription = "المستخدم والحساب", tint = MaterialTheme.colorScheme.onPrimary)
+                    }
                     IconButton(onClick = { onNavigateTo(Screen.Settings.route) }) {
                         Icon(Icons.Default.Settings, contentDescription = "الإعدادات", tint = MaterialTheme.colorScheme.onPrimary)
                     }
@@ -130,6 +150,83 @@ fun DashboardScreen(
             contentPadding = PaddingValues(vertical = 16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
+            // Active User Quick Bar
+            item {
+                Card(
+                    shape = RoundedCornerShape(12.dp),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.75f)),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable {
+                            pinError = null
+                            pinInput = ""
+                            showSwitchUserDialog = true
+                        }
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Surface(
+                            shape = CircleShape,
+                            color = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f),
+                            modifier = Modifier.size(34.dp)
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Icon(
+                                    Icons.Default.Person,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
+                        }
+                        Spacer(modifier = Modifier.width(10.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text(
+                                    text = currentUser.fullName,
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Surface(
+                                    shape = RoundedCornerShape(4.dp),
+                                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)
+                                ) {
+                                    Text(
+                                        text = viewModel.getRoleArabicName(currentUser.role).split(" ").firstOrNull() ?: currentUser.role,
+                                        fontSize = 10.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = MaterialTheme.colorScheme.primary,
+                                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                    )
+                                }
+                            }
+                            Text(
+                                text = "اسم الدخول: @${currentUser.username} • اضغط هنا للتبديل السريع",
+                                fontSize = 11.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        OutlinedButton(
+                            onClick = {
+                                pinError = null
+                                pinInput = ""
+                                showSwitchUserDialog = true
+                            },
+                            shape = RoundedCornerShape(8.dp),
+                            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp)
+                        ) {
+                            Icon(Icons.Default.SwapHoriz, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("تبديل", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                        }
+                    }
+                }
+            }
+
             // Low stock alert banner if any
             if (lowStock.isNotEmpty() || outOfStock.isNotEmpty()) {
                 item {
@@ -251,6 +348,13 @@ fun DashboardScreen(
                         color = Color(0xFF0D9488),
                         onClick = { onNavigateTo(Screen.Currencies.route) }
                     )
+                    Spacer(modifier = Modifier.width(16.dp))
+                    QuickActionItem(
+                        icon = Icons.Default.ManageAccounts,
+                        label = "الموظفين والصلاحيات",
+                        color = Color(0xFF673AB7),
+                        onClick = { onNavigateTo(Screen.Users.route) }
+                    )
                 }
             }
 
@@ -285,8 +389,8 @@ fun DashboardScreen(
                 Row(modifier = Modifier.fillMaxWidth()) {
                     KpiCard(
                         title = "صافي أرباح الشهر",
-                        value = Formatters.formatMoney(netProfit, settings),
-                        subtitle = "مجمل الربح: ${Formatters.formatMoney(grossProfit, settings)}",
+                        value = if (currentUser.canViewProfits) Formatters.formatMoney(netProfit, settings) else "*** محجوب ***",
+                        subtitle = if (currentUser.canViewProfits) "مجمل الربح: ${Formatters.formatMoney(grossProfit, settings)}" else "صلاحية الأرباح غير مفعلة لهذا الحساب",
                         icon = Icons.Default.MonetizationOn,
                         color = Color(0xFF15803D),
                         modifier = Modifier.weight(1f)
@@ -428,6 +532,157 @@ fun DashboardScreen(
             item {
                 Spacer(modifier = Modifier.height(40.dp))
             }
+        }
+
+        // --- Fast Switch User Account Dialog ---
+        if (showSwitchUserDialog) {
+            AlertDialog(
+                onDismissRequest = { showSwitchUserDialog = false },
+                title = {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Default.People, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("تبديل حساب الموظف", fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                    }
+                },
+                text = {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(max = 350.dp)
+                            .verticalScroll(rememberScrollState()),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Text(
+                            text = "المستخدم الحالي: ${currentUser.fullName} (${viewModel.getRoleArabicName(currentUser.role)})",
+                            fontSize = 12.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+
+                        allUsers.forEach { user ->
+                            val isSelected = user.id == currentUser.id
+                            Card(
+                                colors = CardDefaults.cardColors(
+                                    containerColor = if (isSelected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant
+                                ),
+                                shape = RoundedCornerShape(10.dp),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable {
+                                        showSwitchUserDialog = false
+                                        if (isSelected) {
+                                            viewModel.showMessage("أنت بالفعل مسجل الدخول بحساب ${user.fullName}")
+                                        } else if (user.passwordHash.isBlank()) {
+                                            viewModel.switchUser(user, "") { _, _ -> }
+                                        } else {
+                                            targetUserToSwitch = user
+                                            pinInput = ""
+                                            pinError = null
+                                        }
+                                    }
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(12.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Icon(
+                                        if (isSelected) Icons.Default.CheckCircle else Icons.Default.Person,
+                                        contentDescription = null,
+                                        tint = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                    Spacer(modifier = Modifier.width(10.dp))
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(text = user.fullName, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                                        Text(
+                                            text = "${viewModel.getRoleArabicName(user.role)} • @${user.username}",
+                                            fontSize = 11.sp,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
+                                    if (user.passwordHash.isNotBlank()) {
+                                        Icon(Icons.Default.Lock, contentDescription = "محمي", modifier = Modifier.size(16.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                },
+                confirmButton = {
+                    TextButton(onClick = {
+                        showSwitchUserDialog = false
+                        onNavigateTo(Screen.Users.route)
+                    }) {
+                        Text("إدارة الموظفين والصلاحيات")
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showSwitchUserDialog = false }) {
+                        Text("إغلاق")
+                    }
+                }
+            )
+        }
+
+        // --- Switch User PIN Confirmation Dialog ---
+        if (targetUserToSwitch != null) {
+            val target = targetUserToSwitch!!
+            AlertDialog(
+                onDismissRequest = { targetUserToSwitch = null },
+                title = {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Default.Lock, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("الرمز السري لحساب ${target.fullName}", fontSize = 15.sp)
+                    }
+                },
+                text = {
+                    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Text(
+                            text = "أدخل الرمز السري الخاص بالموظف ${target.fullName} (${viewModel.getRoleArabicName(target.role)}):",
+                            fontSize = 13.sp
+                        )
+                        OutlinedTextField(
+                            value = pinInput,
+                            onValueChange = {
+                                pinInput = it
+                                pinError = null
+                            },
+                            label = { Text("الرمز السري") },
+                            visualTransformation = PasswordVisualTransformation(),
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        if (pinError != null) {
+                            Text(
+                                text = pinError!!,
+                                color = MaterialTheme.colorScheme.error,
+                                fontSize = 12.sp
+                            )
+                        }
+                    }
+                },
+                confirmButton = {
+                    Button(
+                        onClick = {
+                            viewModel.switchUser(target, pinInput.trim()) { success, msg ->
+                                if (success) {
+                                    targetUserToSwitch = null
+                                } else {
+                                    pinError = msg
+                                }
+                            }
+                        }
+                    ) {
+                        Text("دخول")
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { targetUserToSwitch = null }) {
+                        Text("إلغاء")
+                    }
+                }
+            )
         }
     }
 }

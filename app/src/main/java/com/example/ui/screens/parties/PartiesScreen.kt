@@ -35,6 +35,7 @@ fun PartiesScreen(
     val settings by viewModel.settings.collectAsStateWithLifecycle()
     val customers by viewModel.allCustomers.collectAsStateWithLifecycle()
     val suppliers by viewModel.allSuppliers.collectAsStateWithLifecycle()
+    val currentUser by viewModel.currentUser.collectAsStateWithLifecycle()
 
     var selectedTab by remember { mutableStateOf(0) } // 0 = Customers, 1 = Suppliers
     var searchQuery by remember { mutableStateOf("") }
@@ -52,6 +53,8 @@ fun PartiesScreen(
         else suppliers.filter { it.name.contains(searchQuery, ignoreCase = true) || it.phone.contains(searchQuery) }
     }
 
+    val canAddCurrent = (selectedTab == 0 && currentUser.canManageCustomers) || (selectedTab == 1 && currentUser.canManageSuppliers)
+
     Scaffold(
         topBar = {
             TopAppBar(
@@ -63,14 +66,16 @@ fun PartiesScreen(
             )
         },
         floatingActionButton = {
-            FloatingActionButton(
-                onClick = {
-                    if (selectedTab == 0) showAddCustomerDialog = true else showAddSupplierDialog = true
-                },
-                containerColor = MaterialTheme.colorScheme.primary,
-                contentColor = MaterialTheme.colorScheme.onPrimary
-            ) {
-                Icon(Icons.Default.Add, contentDescription = "إضافة")
+            if (canAddCurrent) {
+                FloatingActionButton(
+                    onClick = {
+                        if (selectedTab == 0) showAddCustomerDialog = true else showAddSupplierDialog = true
+                    },
+                    containerColor = MaterialTheme.colorScheme.primary,
+                    contentColor = MaterialTheme.colorScheme.onPrimary
+                ) {
+                    Icon(Icons.Default.Add, contentDescription = "إضافة")
+                }
             }
         }
     ) { innerPadding ->

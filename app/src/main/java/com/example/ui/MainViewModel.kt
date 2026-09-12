@@ -25,6 +25,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     init {
         viewModelScope.launch {
             repository.initializeDefaultCurrenciesIfEmpty()
+            repository.initializeDefaultUsersIfEmpty()
+            val admin = repository.getUserByUsername("admin")
+            if (admin != null) {
+                _currentUser.value = admin
+            }
         }
     }
 
@@ -460,6 +465,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun completePurchase(
         paymentType: String,
+        paymentMethod: String = "كاش",
+        paidCurrency: String = "العملة الأساسية",
+        paidCurrencyAmount: Double = 0.0,
+        exchangeRate: Double = 1.0,
         paidAmount: Double,
         referenceNumber: String,
         notes: String,
@@ -483,6 +492,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     taxAmount = 0.0,
                     paidAmount = paidAmount,
                     paymentType = paymentType,
+                    paymentMethod = paymentMethod,
+                    paidCurrency = paidCurrency,
+                    paidCurrencyAmount = paidCurrencyAmount,
+                    exchangeRate = exchangeRate,
                     referenceNumber = referenceNumber,
                     notes = notes,
                     currentUser = _currentUser.value.fullName
@@ -879,6 +892,72 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             } catch (e: Exception) {
                 showMessage("خطأ أثناء تحميل البيانات: ${e.message}")
             }
+        }
+    }
+
+    // --- User Management & Permissions ---
+    fun switchUser(user: User, enteredPin: String, onResult: (Boolean, String) -> Unit) {
+        if (!user.isActive) {
+            onResult(false, "هذا الحساب معطل حالياً من قِبل الإدارة")
+            return
+        }
+        if (user.passwordHash.isNotBlank() && user.passwordHash != enteredPin) {
+            onResult(false, "الرمز السري غير صحيح!")
+            return
+        }
+        _currentUser.value = user
+        showMessage("تم تسجيل الدخول: ${user.fullName} (${getRoleArabicName(user.role)})")
+        viewModelScope.launch {
+            repository.logAudit("تسجيل دخول", "تبديل المستخدم إلى ${user.fullName} (${user.role})", user.fullName)
+        }
+        onResult(true, "تم تسجيل الدخول بنجاح")
+    }
+
+    fun saveUser(user: User, onComplete: () -> Unit = {}) {
+        viewModelScope.launch {
+            if (user.id == 0L) {
+                repository.insertUser(user)
+                repository.logAudit("إضافة مستخدم", "إضافة مستخدم جديد: ${user.fullName} (${user.role})", _currentUser.value.fullName)
+                showMessage("تم إضافة المستخدم ${user.fullName} بنجاح")
+            } else {
+                repository.updateUser(user)
+                if (_currentUser.value.id == user.id) {
+                    _currentUser.value = user
+                }
+                repository.logAudit("تعديل مستخدم", "تعديل بيانات المستخدم: ${user.fullName} (${user.role})", _currentUser.value.fullName)
+                showMessage("تم تحديث بيانات ${user.fullName} بنجاح")
+            }
+            onComplete()
+        }
+    }
+
+    fun deleteUser(user: User, onResult: (Boolean, String) -> Unit) {
+        viewModelScope.launch {
+            if (user.id == _currentUser.value.id) {
+                onResult(false, "لا يمكن حذف الحساب المسجل دخوله حالياً")
+                return@launch
+            }
+            val all = allUsers.value
+            val adminCount = all.count { it.role == "ADMIN" && it.isActive }
+            if (user.role == "ADMIN" && adminCount <= 1) {
+                onResult(false, "لا يمكن حذف المسؤول الأخير في النظام")
+                return@launch
+            }
+            repository.deleteUser(user)
+            repository.logAudit("حذف مستخدم", "حذف المستخدم: ${user.fullName}", _currentUser.value.fullName)
+            showMessage("تم حذف المستخدم ${user.fullName}")
+            onResult(true, "تم حذف المستخدم بنجاح")
+        }
+    }
+
+    fun getRoleArabicName(role: String): String {
+        return when (role) {
+            "ADMIN" -> "مدير عام (صلاحيات كاملة)"
+            "CASHIER" -> "كاشير وبائع"
+            "ACCOUNTANT" -> "محاسب مالي"
+            "INVENTORY_MANAGER" -> "أمين مخزن ومستودع"
+            "CUSTOM" -> "موظف مخصص"
+            else -> role
         }
     }
 }

@@ -36,6 +36,7 @@ fun InvoiceDetailScreen(
     val settings by viewModel.settings.collectAsStateWithLifecycle()
     val allInvoices by viewModel.allInvoices.collectAsStateWithLifecycle()
     val allItems by viewModel.allInvoiceItems.collectAsStateWithLifecycle()
+    val currentUser by viewModel.currentUser.collectAsStateWithLifecycle()
 
     val invoice = allInvoices.find { it.id == invoiceId }
     val items = allItems.filter { it.invoiceId == invoiceId }
@@ -238,16 +239,24 @@ fun InvoiceDetailScreen(
                             }
 
                             if (invoice.status != "CANCELLED") {
+                                val canCancel = currentUser.role == "ADMIN" || currentUser.canManageSettings
                                 Spacer(modifier = Modifier.width(8.dp))
                                 OutlinedButton(
-                                    onClick = { showCancelDialog = true },
+                                    onClick = {
+                                        if (canCancel) {
+                                            showCancelDialog = true
+                                        } else {
+                                            viewModel.showMessage("فقط المدير أو المسؤول يمتلك صلاحية إلغاء الفواتير")
+                                        }
+                                    },
+                                    enabled = canCancel,
                                     colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error),
                                     modifier = Modifier.weight(1f),
                                     shape = RoundedCornerShape(8.dp)
                                 ) {
                                     Icon(Icons.Default.Cancel, contentDescription = null)
                                     Spacer(modifier = Modifier.width(6.dp))
-                                    Text("إلغاء الفاتورة")
+                                    Text(if (canCancel) "إلغاء الفاتورة" else "إلغاء (غير مصرح)")
                                 }
                             }
                         }
@@ -255,13 +264,20 @@ fun InvoiceDetailScreen(
                         if (invoice.invoiceType == "SALE" && invoice.status != "CANCELLED") {
                             Spacer(modifier = Modifier.height(8.dp))
                             FilledTonalButton(
-                                onClick = { showReturnDialog = true },
+                                onClick = {
+                                    if (currentUser.canSell) {
+                                        showReturnDialog = true
+                                    } else {
+                                        viewModel.showMessage("حسابك لا يمتلك صلاحية تسجيل مردودات")
+                                    }
+                                },
+                                enabled = currentUser.canSell,
                                 modifier = Modifier.fillMaxWidth(),
                                 shape = RoundedCornerShape(8.dp)
                             ) {
                                 Icon(Icons.Default.AssignmentReturn, contentDescription = null)
                                 Spacer(modifier = Modifier.width(6.dp))
-                                Text("تسجيل مردود مبيعات (إرجاع أصناف)")
+                                Text(if (currentUser.canSell) "تسجيل مردود مبيعات (إرجاع أصناف)" else "تسجيل مردود (غير مصرح)")
                             }
                         }
                     }

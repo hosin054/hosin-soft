@@ -29,6 +29,7 @@ fun PurchasesScreen(
 ) {
     val settings by viewModel.settings.collectAsStateWithLifecycle()
     val allInvoices by viewModel.allInvoices.collectAsStateWithLifecycle()
+    val currentUser by viewModel.currentUser.collectAsStateWithLifecycle()
 
     val purchases = remember(allInvoices) {
         allInvoices.filter { it.invoiceType == "PURCHASE" }
@@ -49,12 +50,14 @@ fun PurchasesScreen(
             )
         },
         floatingActionButton = {
-            FloatingActionButton(
-                onClick = onNavigateToNewPurchase,
-                containerColor = MaterialTheme.colorScheme.secondary,
-                contentColor = MaterialTheme.colorScheme.onSecondary
-            ) {
-                Icon(Icons.Default.AddShoppingCart, contentDescription = "فاتورة شراء جديدة")
+            if (currentUser.canPurchase) {
+                FloatingActionButton(
+                    onClick = onNavigateToNewPurchase,
+                    containerColor = MaterialTheme.colorScheme.secondary,
+                    contentColor = MaterialTheme.colorScheme.onSecondary
+                ) {
+                    Icon(Icons.Default.AddShoppingCart, contentDescription = "فاتورة شراء جديدة")
+                }
             }
         }
     ) { innerPadding ->
@@ -64,6 +67,27 @@ fun PurchasesScreen(
                 .padding(innerPadding)
                 .padding(14.dp)
         ) {
+            if (!currentUser.canPurchase) {
+                Card(
+                    shape = RoundedCornerShape(10.dp),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.5f)),
+                    modifier = Modifier.fillMaxWidth().padding(bottom = 10.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.padding(12.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(Icons.Default.Lock, contentDescription = null, tint = MaterialTheme.colorScheme.error)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "حسابك الحالي (${currentUser.fullName}) غير مصرح له بتسجيل فواتير مشتريات وتوريد.",
+                            color = MaterialTheme.colorScheme.error,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                }
+            }
             // Summary Card
             Card(
                 shape = RoundedCornerShape(12.dp),

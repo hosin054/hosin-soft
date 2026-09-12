@@ -24,15 +24,20 @@ data class StoreSettings(
 data class User(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
     val username: String,
-    val passwordHash: String,
+    val passwordHash: String = "", // PIN or password
     val fullName: String,
-    val role: String = "ADMIN", // ADMIN, ACCOUNTANT, CASHIER
+    val role: String = "ADMIN", // ADMIN, CASHIER, ACCOUNTANT, INVENTORY_MANAGER, CUSTOM
     val canSell: Boolean = true,
     val canPurchase: Boolean = true,
     val canViewProfits: Boolean = true,
     val canViewReports: Boolean = true,
     val canManageInventory: Boolean = true,
     val canManageSettings: Boolean = true,
+    val canManageCustomers: Boolean = true,
+    val canManageSuppliers: Boolean = true,
+    val canManageExpenses: Boolean = true,
+    val canGiveDiscount: Boolean = true,
+    val canManageUsers: Boolean = true,
     val isActive: Boolean = true,
     val createdAt: Long = System.currentTimeMillis()
 )

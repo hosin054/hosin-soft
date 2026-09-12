@@ -20,6 +20,7 @@ class AccountingRepository(private val dao: AppDao) {
     suspend fun getUserByUsername(username: String): User? = dao.getUserByUsername(username)
     suspend fun insertUser(user: User): Long = dao.insertUser(user)
     suspend fun updateUser(user: User) = dao.updateUser(user)
+    suspend fun deleteUser(user: User) = dao.deleteUser(user)
     suspend fun getUserCount(): Int = dao.getUserCount()
 
     // Categories
@@ -264,6 +265,10 @@ class AccountingRepository(private val dao: AppDao) {
         taxAmount: Double,
         paidAmount: Double,
         paymentType: String, // CASH or CREDIT
+        paymentMethod: String = "كاش",
+        paidCurrency: String = "العملة الأساسية",
+        paidCurrencyAmount: Double = 0.0,
+        exchangeRate: Double = 1.0,
         referenceNumber: String,
         notes: String,
         currentUser: String
@@ -280,6 +285,7 @@ class AccountingRepository(private val dao: AppDao) {
             invoiceNumber = invoiceNumber,
             invoiceType = "PURCHASE",
             paymentType = paymentType,
+            paymentMethod = paymentMethod,
             partyId = supplier?.id,
             partyName = supplier?.name ?: "مورد نقدي",
             subtotal = subtotal,
@@ -288,6 +294,9 @@ class AccountingRepository(private val dao: AppDao) {
             totalAmount = totalAmount,
             paidAmount = actualPaid,
             remainingAmount = remainingAmount,
+            paidCurrency = paidCurrency,
+            paidCurrencyAmount = paidCurrencyAmount,
+            exchangeRate = exchangeRate,
             totalCost = totalAmount,
             profit = 0.0,
             notes = notes,
@@ -1006,6 +1015,68 @@ class AccountingRepository(private val dao: AppDao) {
                 CurrencyRate(code = "KWD", name = "دينار كويتي", symbol = "د.ك", rateToBase = 12.2, isBase = false)
             )
             dao.insertCurrencyRates(defaults)
+        }
+    }
+
+    suspend fun initializeDefaultUsersIfEmpty() {
+        if (dao.getUserCount() == 0) {
+            val defaultAdmin = User(
+                username = "admin",
+                passwordHash = "1234",
+                fullName = "المدير العام",
+                role = "ADMIN",
+                canSell = true,
+                canPurchase = true,
+                canViewProfits = true,
+                canViewReports = true,
+                canManageInventory = true,
+                canManageSettings = true,
+                canManageCustomers = true,
+                canManageSuppliers = true,
+                canManageExpenses = true,
+                canGiveDiscount = true,
+                canManageUsers = true,
+                isActive = true
+            )
+            val defaultCashier = User(
+                username = "cashier",
+                passwordHash = "0000",
+                fullName = "موظف الكاشير",
+                role = "CASHIER",
+                canSell = true,
+                canPurchase = false,
+                canViewProfits = false,
+                canViewReports = false,
+                canManageInventory = false,
+                canManageSettings = false,
+                canManageCustomers = true,
+                canManageSuppliers = false,
+                canManageExpenses = false,
+                canGiveDiscount = false,
+                canManageUsers = false,
+                isActive = true
+            )
+            val defaultAccountant = User(
+                username = "accountant",
+                passwordHash = "1111",
+                fullName = "محاسب المتجر",
+                role = "ACCOUNTANT",
+                canSell = true,
+                canPurchase = true,
+                canViewProfits = true,
+                canViewReports = true,
+                canManageInventory = true,
+                canManageSettings = false,
+                canManageCustomers = true,
+                canManageSuppliers = true,
+                canManageExpenses = true,
+                canGiveDiscount = true,
+                canManageUsers = false,
+                isActive = true
+            )
+            dao.insertUser(defaultAdmin)
+            dao.insertUser(defaultCashier)
+            dao.insertUser(defaultAccountant)
         }
     }
 }
