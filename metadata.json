@@ -1,0 +1,6 @@
+{
+  "name": "حسين سوفت",
+  "description": "نظام حسين سوفت المحاسبي الشامل لإدارة المبيعات والمشتريات والمخزون والحسابات",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

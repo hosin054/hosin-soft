@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Outer shield / ledger card -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M32,26h44c3.3,0 6,2.7 6,6v44c0,3.3 -2.7,6 -6,6H32c-3.3,0 -6,-2.7 -6,-6V32c0,-3.3 2.7,-6 6,-6z" />
+    <!-- Header ribbon -->
+    <path
+        android:fillColor="#0A5C36"
+        android:pathData="M26,34h56v10H26z" />
+    <!-- Bar charts -->
+    <path
+        android:fillColor="#10B981"
+        android:pathData="M35,68h6v-14h-6z" />
+    <path
+        android:fillColor="#059669"
+        android:pathData="M45,68h6v-22h-6z" />
+    <path
+        android:fillColor="#047857"
+        android:pathData="M55,68h6v-18h-6z" />
+    <!-- Growth Arrow / Currency symbol -->
+    <path
+        android:fillColor="#F59E0B"
+        android:pathData="M65,52l7,-7 7,7 -2.5,2.5 -2.7,-2.7v14h-3.6v-14l-2.7,2.7z" />
+    <!-- Gold coin badge -->
+    <path
+        android:fillColor="#F59E0B"
+        android:pathData="M54,34a5,5 0 1,0 0.001,0z" />
+</vector>
