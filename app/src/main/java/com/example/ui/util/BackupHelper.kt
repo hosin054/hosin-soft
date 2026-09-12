@@ -125,4 +125,28 @@ object BackupHelper {
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         })
     }
+
+    fun shareToTelegram(context: Context, text: String, title: String = "إرسال إلى تلغرام") {
+        try {
+            // First attempt: direct telegram intent
+            val telegramIntent = Intent(Intent.ACTION_SEND).apply {
+                type = "text/plain"
+                setPackage("org.telegram.messenger")
+                putExtra(Intent.EXTRA_TEXT, text)
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            context.startActivity(telegramIntent)
+        } catch (e: Exception) {
+            // Second attempt: web share link or system chooser
+            try {
+                val encoded = java.net.URLEncoder.encode(text, "UTF-8")
+                val webIntent = Intent(Intent.ACTION_VIEW, android.net.Uri.parse("https://t.me/share/url?url=&text=$encoded")).apply {
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                }
+                context.startActivity(webIntent)
+            } catch (e2: Exception) {
+                shareText(context, text, title)
+            }
+        }
+    }
 }

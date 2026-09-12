@@ -1,5 +1,6 @@
 package com.example.ui.screens.parties
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -266,10 +267,13 @@ fun CustomerCard(
     settings: com.example.data.model.StoreSettings?,
     onClick: () -> Unit
 ) {
+    val hasBalance = customer.currentBalance > 0
+
     Card(
-        shape = RoundedCornerShape(10.dp),
+        shape = RoundedCornerShape(14.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        elevation = CardDefaults.cardElevation(2.dp),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+        elevation = CardDefaults.cardElevation(defaultElevation = 1.5.dp),
         modifier = Modifier
             .fillMaxWidth()
             .clickable(onClick = onClick)
@@ -278,35 +282,55 @@ fun CustomerCard(
             modifier = Modifier.padding(14.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Box(
-                modifier = Modifier
-                    .size(42.dp)
-                    .background(MaterialTheme.colorScheme.primaryContainer, CircleShape),
-                contentAlignment = Alignment.Center
+            Surface(
+                shape = CircleShape,
+                color = MaterialTheme.colorScheme.primaryContainer,
+                modifier = Modifier.size(44.dp)
             ) {
-                Icon(Icons.Default.Person, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                Box(contentAlignment = Alignment.Center) {
+                    Icon(
+                        Icons.Default.Person,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(22.dp)
+                    )
+                }
             }
             Spacer(modifier = Modifier.width(12.dp))
             Column(modifier = Modifier.weight(1f)) {
-                Text(text = customer.name, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                Text(
+                    text = customer.name,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+                Spacer(modifier = Modifier.height(2.dp))
                 Text(
                     text = "الهاتف: ${customer.phone.ifBlank { "غير مسجل" }} • المبيعات: ${Formatters.formatMoney(customer.totalSales, settings)}",
-                    fontSize = 11.sp,
+                    style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
             Column(horizontalAlignment = Alignment.End) {
                 Text(
                     text = Formatters.formatMoney(customer.currentBalance, settings),
+                    style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold,
-                    fontSize = 14.sp,
-                    color = if (customer.currentBalance > 0) MaterialTheme.colorScheme.error else Color(0xFF15803D)
+                    color = if (hasBalance) MaterialTheme.colorScheme.error else Color(0xFF15803D)
                 )
-                Text(
-                    text = if (customer.currentBalance > 0) "مستحق عليه" else "خالص",
-                    fontSize = 10.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
+                Spacer(modifier = Modifier.height(2.dp))
+                Surface(
+                    shape = RoundedCornerShape(4.dp),
+                    color = if (hasBalance) MaterialTheme.colorScheme.error.copy(alpha = 0.12f) else Color(0xFF15803D).copy(alpha = 0.12f)
+                ) {
+                    Text(
+                        text = if (hasBalance) "مستحق عليه" else "خالص",
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = if (hasBalance) MaterialTheme.colorScheme.error else Color(0xFF15803D),
+                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                    )
+                }
             }
         }
     }
@@ -318,10 +342,13 @@ fun SupplierCard(
     settings: com.example.data.model.StoreSettings?,
     onClick: () -> Unit
 ) {
+    val hasBalance = supplier.currentBalance > 0
+
     Card(
-        shape = RoundedCornerShape(10.dp),
+        shape = RoundedCornerShape(14.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        elevation = CardDefaults.cardElevation(2.dp),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+        elevation = CardDefaults.cardElevation(defaultElevation = 1.5.dp),
         modifier = Modifier
             .fillMaxWidth()
             .clickable(onClick = onClick)
@@ -330,35 +357,55 @@ fun SupplierCard(
             modifier = Modifier.padding(14.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Box(
-                modifier = Modifier
-                    .size(42.dp)
-                    .background(MaterialTheme.colorScheme.secondaryContainer, CircleShape),
-                contentAlignment = Alignment.Center
+            Surface(
+                shape = CircleShape,
+                color = MaterialTheme.colorScheme.secondaryContainer,
+                modifier = Modifier.size(44.dp)
             ) {
-                Icon(Icons.Default.LocalShipping, contentDescription = null, tint = MaterialTheme.colorScheme.secondary)
+                Box(contentAlignment = Alignment.Center) {
+                    Icon(
+                        Icons.Default.LocalShipping,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.secondary,
+                        modifier = Modifier.size(22.dp)
+                    )
+                }
             }
             Spacer(modifier = Modifier.width(12.dp))
             Column(modifier = Modifier.weight(1f)) {
-                Text(text = supplier.name, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                Text(
+                    text = supplier.name,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+                Spacer(modifier = Modifier.height(2.dp))
                 Text(
                     text = "الهاتف: ${supplier.phone.ifBlank { "غير مسجل" }} • المشتريات: ${Formatters.formatMoney(supplier.totalPurchases, settings)}",
-                    fontSize = 11.sp,
+                    style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
             Column(horizontalAlignment = Alignment.End) {
                 Text(
                     text = Formatters.formatMoney(supplier.currentBalance, settings),
+                    style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold,
-                    fontSize = 14.sp,
-                    color = if (supplier.currentBalance > 0) MaterialTheme.colorScheme.error else Color(0xFF15803D)
+                    color = if (hasBalance) MaterialTheme.colorScheme.error else Color(0xFF15803D)
                 )
-                Text(
-                    text = if (supplier.currentBalance > 0) "مستحق له" else "خالص",
-                    fontSize = 10.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
+                Spacer(modifier = Modifier.height(2.dp))
+                Surface(
+                    shape = RoundedCornerShape(4.dp),
+                    color = if (hasBalance) MaterialTheme.colorScheme.error.copy(alpha = 0.12f) else Color(0xFF15803D).copy(alpha = 0.12f)
+                ) {
+                    Text(
+                        text = if (hasBalance) "مستحق له" else "خالص",
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = if (hasBalance) MaterialTheme.colorScheme.error else Color(0xFF15803D),
+                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                    )
+                }
             }
         }
     }

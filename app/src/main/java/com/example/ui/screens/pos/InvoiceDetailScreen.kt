@@ -7,6 +7,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -55,6 +56,12 @@ fun InvoiceDetailScreen(
                 },
                 actions = {
                     if (invoice != null && invoice.status != "CANCELLED") {
+                        IconButton(onClick = {
+                            val text = InvoicePrinter.generateReceiptText(invoice, items, settings)
+                            BackupHelper.shareToTelegram(context, text, "فاتورة ${invoice.invoiceNumber}")
+                        }) {
+                            Icon(Icons.AutoMirrored.Filled.Send, contentDescription = "إرسال عبر تلغرام", tint = MaterialTheme.colorScheme.onPrimary)
+                        }
                         IconButton(onClick = {
                             val text = InvoicePrinter.generateReceiptText(invoice, items, settings)
                             BackupHelper.shareText(context, text, "فاتورة ${invoice.invoiceNumber}")
@@ -224,6 +231,21 @@ fun InvoiceDetailScreen(
                 // Action buttons
                 item {
                     Column(modifier = Modifier.fillMaxWidth()) {
+                        Button(
+                            onClick = {
+                                val text = InvoicePrinter.generateReceiptText(invoice, items, settings)
+                                BackupHelper.shareToTelegram(context, text, "فاتورة ${invoice.invoiceNumber}")
+                            },
+                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF229ED9)),
+                            shape = RoundedCornerShape(8.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Icon(Icons.AutoMirrored.Filled.Send, contentDescription = null, tint = Color.White)
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("إرسال الفاتورة عبر تلغرام", fontWeight = FontWeight.Bold, color = Color.White)
+                        }
+                        Spacer(modifier = Modifier.height(8.dp))
+
                         Row(modifier = Modifier.fillMaxWidth()) {
                             Button(
                                 onClick = {

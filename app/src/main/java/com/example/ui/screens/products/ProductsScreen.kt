@@ -1,5 +1,6 @@
 package com.example.ui.screens.products
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -270,16 +271,18 @@ fun ProductCardItem(
     onPrintLabel: () -> Unit,
     onDelete: () -> Unit
 ) {
-    val isLow = product.currentStockSubUnits <= product.minStockSubUnits
+    val isOut = product.currentStockSubUnits <= 0
+    val isLow = !isOut && product.currentStockSubUnits <= product.minStockSubUnits
     val mainStock = if (product.conversionFactor > 0) product.currentStockSubUnits / product.conversionFactor else product.currentStockSubUnits
 
     Card(
-        shape = RoundedCornerShape(10.dp),
+        shape = RoundedCornerShape(14.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        elevation = CardDefaults.cardElevation(2.dp),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+        elevation = CardDefaults.cardElevation(defaultElevation = 1.5.dp),
         modifier = Modifier.fillMaxWidth()
     ) {
-        Column(modifier = Modifier.padding(12.dp)) {
+        Column(modifier = Modifier.padding(14.dp)) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -288,74 +291,104 @@ fun ProductCardItem(
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
                         text = product.name,
+                        style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold,
-                        fontSize = 15.sp
+                        color = MaterialTheme.colorScheme.onSurface
                     )
+                    Spacer(modifier = Modifier.height(2.dp))
                     Text(
                         text = "التصنيف: ${product.category} • الباركود: ${product.barcode.ifBlank { "بدون" }}",
-                        fontSize = 11.sp,
+                        style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
 
-                if (isLow) {
-                    AssistChip(
-                        onClick = { if (canManageInventory) onAdjustStock() },
-                        label = { Text("منخفض!", fontSize = 10.sp, color = MaterialTheme.colorScheme.error) },
-                        leadingIcon = { Icon(Icons.Default.Warning, contentDescription = null, tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(14.dp)) },
-                        colors = AssistChipDefaults.assistChipColors(containerColor = MaterialTheme.colorScheme.errorContainer)
+                if (isOut) {
+                    Surface(
+                        shape = RoundedCornerShape(6.dp),
+                        color = MaterialTheme.colorScheme.error.copy(alpha = 0.12f)
+                    ) {
+                        Text(
+                            text = "نفذ المخزون!",
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.error,
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+                        )
+                    }
+                } else if (isLow) {
+                    Surface(
+                        shape = RoundedCornerShape(6.dp),
+                        color = Color(0xFFD97706).copy(alpha = 0.12f)
+                    ) {
+                        Text(
+                            text = "مخزون منخفض!",
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = Color(0xFFD97706),
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+                        )
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(10.dp))
+
+            // Unit details & conversions pill banner
+            Surface(
+                shape = RoundedCornerShape(8.dp),
+                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                border = BorderStroke(0.5.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 10.dp, vertical = 6.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "الوحدة: 1 ${product.mainUnit} = ${product.conversionFactor.toInt()} ${product.subUnit}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Text(
+                        text = "المخزون: %.1f %s (%.0f %s)".format(mainStock, product.mainUnit, product.currentStockSubUnits, product.subUnit),
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = if (isOut || isLow) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
                     )
                 }
             }
 
-            Spacer(modifier = Modifier.height(8.dp))
-
-            // Unit details & conversions
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f), RoundedCornerShape(6.dp))
-                    .padding(8.dp),
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                Text(
-                    text = "الوحدة: 1 ${product.mainUnit} = ${product.conversionFactor.toInt()} ${product.subUnit}",
-                    fontSize = 11.sp
-                )
-                Text(
-                    text = "المخزون: %.1f %s (%.0f %s)".format(mainStock, product.mainUnit, product.currentStockSubUnits, product.subUnit),
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = if (isLow) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
-                )
-            }
-
-            Spacer(modifier = Modifier.height(8.dp))
+            Spacer(modifier = Modifier.height(10.dp))
 
             // Pricing row
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
                     text = if (canViewProfits) "الشراء: ${Formatters.formatMoney(product.purchasePrice, settings)}" else "الشراء: *** (محجوب)",
-                    fontSize = 12.sp,
+                    style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 Text(
                     text = "البيع نقداً: ${Formatters.formatMoney(product.cashSalePrice, settings)}",
-                    fontSize = 12.sp,
+                    style = MaterialTheme.typography.titleSmall,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.primary
                 )
                 Text(
                     text = "البيع آجل: ${Formatters.formatMoney(product.creditSalePrice, settings)}",
-                    fontSize = 12.sp,
+                    style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
 
-            Spacer(modifier = Modifier.height(6.dp))
+            Spacer(modifier = Modifier.height(8.dp))
 
             // Action buttons row
             Row(
@@ -366,21 +399,26 @@ fun ProductCardItem(
                 TextButton(onClick = onPrintLabel) {
                     Icon(Icons.Default.QrCode, contentDescription = null, modifier = Modifier.size(16.dp))
                     Spacer(modifier = Modifier.width(4.dp))
-                    Text("ملصق سعر", fontSize = 12.sp)
+                    Text("ملصق سعر", style = MaterialTheme.typography.labelMedium)
                 }
                 if (canManageInventory) {
                     TextButton(onClick = onAdjustStock) {
                         Icon(Icons.Default.Tune, contentDescription = null, modifier = Modifier.size(16.dp))
                         Spacer(modifier = Modifier.width(4.dp))
-                        Text("تسوية جرد", fontSize = 12.sp)
+                        Text("تسوية جرد", style = MaterialTheme.typography.labelMedium)
                     }
                     TextButton(onClick = onEdit) {
                         Icon(Icons.Default.Edit, contentDescription = null, modifier = Modifier.size(16.dp))
                         Spacer(modifier = Modifier.width(4.dp))
-                        Text("تعديل", fontSize = 12.sp)
+                        Text("تعديل", style = MaterialTheme.typography.labelMedium)
                     }
                     IconButton(onClick = onDelete, modifier = Modifier.size(32.dp)) {
-                        Icon(Icons.Default.DeleteOutline, contentDescription = "حذف", tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(18.dp))
+                        Icon(
+                            Icons.Default.DeleteOutline,
+                            contentDescription = "حذف",
+                            tint = MaterialTheme.colorScheme.error,
+                            modifier = Modifier.size(18.dp)
+                        )
                     }
                 }
             }

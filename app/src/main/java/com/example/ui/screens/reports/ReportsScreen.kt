@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -18,6 +19,7 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.data.model.CurrencyRate
 import com.example.ui.MainViewModel
+import com.example.ui.components.*
 import com.example.ui.util.BackupHelper
 import com.example.ui.util.Formatters
 import java.util.Calendar
@@ -201,6 +203,30 @@ fun ReportsScreen(
                         BackupHelper.shareText(context, text, "تقرير مالي $periodLabel - ${selectedCurrency.name}")
                     }) {
                         Icon(Icons.Default.Share, contentDescription = "مشاركة التقرير", tint = MaterialTheme.colorScheme.onPrimary)
+                    }
+                    IconButton(onClick = {
+                        val text = """
+📊 *تقرير الأرباح والمالية - ${settings?.storeName}*
+الفترة: $periodLabel
+العملة: ${selectedCurrency.name} (${selectedCurrency.symbol})
+━━━━━━━━━━━━━━━━━━━
+💰 إجمالي المبيعات: ${toDisplayMoney(totalSalesBase)}
+${if (currentUser.canViewProfits) "💵 مجمل ربح المبيعات: ${toDisplayProfit(totalProfitGrossBase)}\n" else ""}📦 إجمالي المصروفات: ${toDisplayMoney(totalExpensesBase)}
+${if (currentUser.canViewProfits) "📈 صافي الربح النهائي: ${toDisplayProfit(netProfitBase)}\n" else ""}━━━━━━━━━━━━━━━━━━━
+💳 المقبوضات حسب وسيلة الدفع:
+• كاش: ${toDisplayMoney(cashSalesBase)}
+• شبكة / مدى: ${toDisplayMoney(electronicSalesBase)}
+• تحويل بنكي: ${toDisplayMoney(bankTransferSalesBase)}
+• مبيعات آجلة: ${toDisplayMoney(creditSalesBase)}
+━━━━━━━━━━━━━━━━━━━
+🛒 إجمالي المشتريات: ${toDisplayMoney(totalPurchasesBase)}
+• ديون العملاء (لنا): ${toDisplayMoney(totalCustomersDebtBase)}
+• مستحقات الموردين (علينا): ${toDisplayMoney(totalSuppliersPayableBase)}
+🚀 *حسين سوفت لإدارة المتاجر ونقاط البيع*
+                        """.trimIndent()
+                        BackupHelper.shareToTelegram(context, text, "تقرير مالي $periodLabel - ${selectedCurrency.name}")
+                    }) {
+                        Icon(Icons.AutoMirrored.Filled.Send, contentDescription = "إرسال إلى تلغرام", tint = MaterialTheme.colorScheme.onPrimary)
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
@@ -469,6 +495,23 @@ fun ReportsScreen(
                 }
             }
 
+            // Interactive Donut Chart for Payment Methods
+            item {
+                val slices = buildList {
+                    if (cashSalesBase > 0) add(DonutSlice("كاش", cashSalesBase, Color(0xFF16A34A)))
+                    if (electronicSalesBase > 0) add(DonutSlice("شبكة / مدى", electronicSalesBase, Color(0xFF0284C7)))
+                    if (bankTransferSalesBase > 0) add(DonutSlice("تحويل بنكي", bankTransferSalesBase, Color(0xFF7C3AED)))
+                    if (creditSalesBase > 0) add(DonutSlice("مبيعات آجلة", creditSalesBase, Color(0xFFEA580C)))
+                }
+                if (slices.isNotEmpty()) {
+                    InteractiveDonutChart(
+                        title = "مخطط توزيع المقبوضات التفاعلي (Donut Chart)",
+                        slices = slices,
+                        currencySymbol = selectedCurrency.symbol
+                    )
+                }
+            }
+
             // Payment Methods Breakdown Card (الكاش والإلكتروني والآجل)
             item {
                 Card(
@@ -511,6 +554,26 @@ fun ReportsScreen(
                         )
                     }
                 }
+            }
+
+            // Interactive 3D Bar Chart
+            item {
+                val barData = buildList {
+                    add(ChartBarData("المبيعات", totalSalesBase, Color(0xFF2563EB), Color(0xFF1D4ED8)))
+                    if (currentUser.canViewProfits) {
+                        add(ChartBarData("مجمل الربح", totalProfitGrossBase, Color(0xFF059669), Color(0xFF047857)))
+                    }
+                    add(ChartBarData("المصروفات", totalExpensesBase, Color(0xFFDC2626), Color(0xFFB91C1C)))
+                    if (currentUser.canViewProfits) {
+                        add(ChartBarData("صافي الربح", maxOf(0.0, netProfitBase), Color(0xFF16A34A), Color(0xFF15803D)))
+                    }
+                }
+                Interactive3DBarChart(
+                    title = "مقارنة المؤشرات المالية التفاعلية (3D)",
+                    subtitle = "اضغط على أي عمود لمعاينة النسبة والمبلغ والتحليل المالي",
+                    items = barData,
+                    currencySymbol = selectedCurrency.symbol
+                )
             }
 
             // Detailed Financial Table
@@ -576,6 +639,34 @@ fun ReportsScreen(
                         ReportRow(title = "مستحقات الموردين الواجب سدادها (علينا)", value = toDisplayMoney(totalSuppliersPayableBase), color = MaterialTheme.colorScheme.error, isBold = true)
                     }
                 }
+            }
+
+            // Telegram Action Card
+            item {
+                TelegramActionCard(
+                    onSendDailyReport = {
+                        val text = """
+📊 *تقرير الأرباح والمالية - ${settings?.storeName}*
+الفترة: $periodLabel
+العملة: ${selectedCurrency.name} (${selectedCurrency.symbol})
+━━━━━━━━━━━━━━━━━━━
+💰 إجمالي المبيعات: ${toDisplayMoney(totalSalesBase)}
+${if (currentUser.canViewProfits) "💵 مجمل ربح المبيعات: ${toDisplayProfit(totalProfitGrossBase)}\n" else ""}📦 إجمالي المصروفات: ${toDisplayMoney(totalExpensesBase)}
+${if (currentUser.canViewProfits) "📈 صافي الربح النهائي: ${toDisplayProfit(netProfitBase)}\n" else ""}━━━━━━━━━━━━━━━━━━━
+💳 المقبوضات حسب وسيلة الدفع:
+• كاش: ${toDisplayMoney(cashSalesBase)}
+• شبكة / مدى: ${toDisplayMoney(electronicSalesBase)}
+• تحويل بنكي: ${toDisplayMoney(bankTransferSalesBase)}
+• مبيعات آجلة: ${toDisplayMoney(creditSalesBase)}
+━━━━━━━━━━━━━━━━━━━
+🛒 إجمالي المشتريات: ${toDisplayMoney(totalPurchasesBase)}
+• ديون العملاء (لنا): ${toDisplayMoney(totalCustomersDebtBase)}
+• مستحقات الموردين (علينا): ${toDisplayMoney(totalSuppliersPayableBase)}
+🚀 *حسين سوفت لإدارة المتاجر ونقاط البيع*
+                        """.trimIndent()
+                        BackupHelper.shareToTelegram(context, text, "تقرير مالي $periodLabel - ${selectedCurrency.name}")
+                    }
+                )
             }
 
             item {

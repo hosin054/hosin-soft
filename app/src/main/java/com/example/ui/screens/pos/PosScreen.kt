@@ -1,10 +1,14 @@
 package com.example.ui.screens.pos
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
@@ -49,16 +53,22 @@ fun PosScreen(
     var showCheckoutDialog by remember { mutableStateOf(false) }
     var showSaveQuotationDialog by remember { mutableStateOf(false) }
 
-    // Filter products
-    val filteredProducts = remember(searchQuery, products) {
-        if (searchQuery.isBlank()) {
-            products.take(12)
-        } else {
-            products.filter {
-                it.name.contains(searchQuery, ignoreCase = true) ||
-                        it.barcode.contains(searchQuery, ignoreCase = true) ||
-                        it.sku.contains(searchQuery, ignoreCase = true)
-            }
+    var mobileTab by remember { mutableStateOf(0) } // 0 = Products, 1 = Cart
+    var selectedCategory by remember { mutableStateOf<String?>(null) }
+
+    val categories = remember(products) {
+        products.map { it.category }.filter { it.isNotBlank() }.distinct()
+    }
+
+    // Filter products (show all matching, not just 12)
+    val filteredProducts = remember(searchQuery, selectedCategory, products) {
+        products.filter {
+            val matchesSearch = searchQuery.isBlank() ||
+                    it.name.contains(searchQuery, ignoreCase = true) ||
+                    it.barcode.contains(searchQuery, ignoreCase = true) ||
+                    it.sku.contains(searchQuery, ignoreCase = true)
+            val matchesCat = selectedCategory == null || it.category == selectedCategory
+            matchesSearch && matchesCat
         }
     }
 
@@ -90,241 +100,591 @@ fun PosScreen(
                     titleContentColor = MaterialTheme.colorScheme.onPrimary
                 )
             )
-        },
-        bottomBar = {
-            if (cartItems.isNotEmpty()) {
-                Surface(
-                    color = MaterialTheme.colorScheme.surface,
-                    shadowElevation = 8.dp,
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Column(modifier = Modifier.padding(16.dp)) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween
-                        ) {
-                            Text(text = "عدد الأصناف: ${cartItems.size}")
-                            Text(
-                                text = "الإجمالي: ${Formatters.formatMoney(totalAmount, settings)}",
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 18.sp,
-                                color = MaterialTheme.colorScheme.primary
-                            )
-                        }
-                        Spacer(modifier = Modifier.height(10.dp))
-                        Button(
-                            onClick = {
-                                if (currentUser.canSell) {
-                                    showCheckoutDialog = true
-                                } else {
-                                    viewModel.showMessage("حسابك الحالي لا يمتلك صلاحية إجراء المبيعات")
-                                }
-                            },
-                            enabled = currentUser.canSell,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(50.dp),
-                            shape = RoundedCornerShape(10.dp)
-                        ) {
-                            Icon(Icons.Default.CheckCircle, contentDescription = null)
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text(
-                                if (currentUser.canSell) "متابعة الدفع وحفظ الفاتورة" else "متابعة الدفع (صلاحية مبيعات غير مفعلة)",
-                                fontSize = 15.sp,
-                                fontWeight = FontWeight.Bold
-                            )
-                        }
-                    }
-                }
-            }
         }
     ) { innerPadding ->
-        Column(
+        BoxWithConstraints(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(innerPadding)
-                .padding(12.dp)
         ) {
-            if (!currentUser.canSell) {
-                Card(
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer),
-                    shape = RoundedCornerShape(8.dp),
+            val isTablet = maxWidth >= 720.dp
+
+            if (isTablet) {
+                // ==================== TABLET DUAL-PANE VIEW ====================
+                Row(
                     modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(bottom = 8.dp)
+                        .fillMaxSize()
+                        .padding(12.dp),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    Row(
-                        modifier = Modifier.padding(10.dp),
-                        verticalAlignment = Alignment.CenterVertically
+                    // Left Pane: Products catalog (unconstrained scroll)
+                    Column(
+                        modifier = Modifier
+                            .weight(1.15f)
+                            .fillMaxHeight()
                     ) {
-                        Icon(Icons.Default.Lock, contentDescription = null, tint = MaterialTheme.colorScheme.error)
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(
-                            text = "تنبيه: حساب المستخدم (${currentUser.fullName}) في وضع العرض فقط ولا يمتلك صلاحية إجراء عمليات البيع.",
-                            fontSize = 12.sp,
-                            color = MaterialTheme.colorScheme.onErrorContainer
-                        )
-                    }
-                }
-            }
-            // Search & Barcode row
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                OutlinedTextField(
-                    value = searchQuery,
-                    onValueChange = { searchQuery = it },
-                    placeholder = { Text("بحث باسم المنتج أو الباركود...") },
-                    leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
-                    trailingIcon = {
-                        if (searchQuery.isNotEmpty()) {
-                            IconButton(onClick = { searchQuery = "" }) {
-                                Icon(Icons.Default.Close, contentDescription = null)
+                        // Search & Scanner
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            OutlinedTextField(
+                                value = searchQuery,
+                                onValueChange = { searchQuery = it },
+                                placeholder = { Text("بحث عن منتج بالاسم أو الباركود...") },
+                                leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
+                                trailingIcon = {
+                                    if (searchQuery.isNotEmpty()) {
+                                        IconButton(onClick = { searchQuery = "" }) {
+                                            Icon(Icons.Default.Close, contentDescription = null)
+                                        }
+                                    }
+                                },
+                                singleLine = true,
+                                modifier = Modifier.weight(1f)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            FilledTonalIconButton(onClick = { showBarcodeScanner = true }) {
+                                Icon(Icons.Default.CameraAlt, contentDescription = "مسح باركود")
                             }
                         }
-                    },
-                    singleLine = true,
-                    modifier = Modifier.weight(1f)
-                )
-                Spacer(modifier = Modifier.width(8.dp))
-                FilledTonalIconButton(onClick = { showBarcodeScanner = true }) {
-                    Icon(Icons.Default.CameraAlt, contentDescription = "مسح باركود")
-                }
-            }
 
-            Spacer(modifier = Modifier.height(10.dp))
+                        if (categories.isNotEmpty()) {
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .horizontalScroll(rememberScrollState()),
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                FilterChip(
+                                    selected = selectedCategory == null,
+                                    onClick = { selectedCategory = null },
+                                    label = { Text("الكل (${products.size})") }
+                                )
+                                categories.forEach { cat ->
+                                    FilterChip(
+                                        selected = selectedCategory == cat,
+                                        onClick = { selectedCategory = if (selectedCategory == cat) null else cat },
+                                        label = { Text(cat) }
+                                    )
+                                }
+                            }
+                        }
 
-            // Customer Selector Tag
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(8.dp))
-                    .clickable { showCustomerPicker = true }
-                    .padding(horizontal = 12.dp, vertical = 8.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(
-                        Icons.Default.Person,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(20.dp)
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text(
-                        text = if (selectedCustomer != null) "العميل: ${selectedCustomer?.name} (الرصيد: ${Formatters.formatMoney(selectedCustomer?.currentBalance ?: 0.0, settings)})"
-                        else "العميل: نقدي (اضغط للتحديد)",
-                        fontSize = 13.sp,
-                        fontWeight = FontWeight.Medium
-                    )
-                }
-                if (selectedCustomer != null) {
-                    IconButton(
-                        onClick = { viewModel.selectCustomer(null) },
-                        modifier = Modifier.size(24.dp)
-                    ) {
-                        Icon(Icons.Default.Close, contentDescription = "إلغاء التحديد", modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.height(10.dp))
+
+                        Text(
+                            text = "قائمة المنتجات (${filteredProducts.size})",
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 14.sp
+                        )
+                        Spacer(modifier = Modifier.height(6.dp))
+
+                        if (filteredProducts.isEmpty()) {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .weight(1f)
+                                    .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f), RoundedCornerShape(10.dp)),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text("لا توجد منتجات مطابقة للبحث", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                        } else {
+                            LazyColumn(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .weight(1f),
+                                verticalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                items(filteredProducts) { p ->
+                                    PosProductItemCard(
+                                        product = p,
+                                        settings = settings,
+                                        onAddToCart = { isMain ->
+                                            viewModel.addToCart(p, isMainUnit = isMain, quantity = 1.0)
+                                        }
+                                    )
+                                }
+                            }
+                        }
                     }
-                } else {
-                    Icon(Icons.Default.ArrowDropDown, contentDescription = null)
-                }
-            }
 
-            Spacer(modifier = Modifier.height(10.dp))
+                    // Right Pane: Cart & Quick Checkout
+                    Card(
+                        shape = RoundedCornerShape(14.dp),
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)),
+                        modifier = Modifier
+                            .weight(0.85f)
+                            .fillMaxHeight()
+                    ) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .padding(12.dp)
+                        ) {
+                            // Customer Selector
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .background(MaterialTheme.colorScheme.surface, RoundedCornerShape(8.dp))
+                                    .clickable { showCustomerPicker = true }
+                                    .padding(horizontal = 12.dp, vertical = 8.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
+                                    Icon(Icons.Default.Person, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text(
+                                        text = if (selectedCustomer != null) "العميل: ${selectedCustomer?.name}" else "العميل: نقدي (اضغط للتحديد)",
+                                        fontSize = 13.sp,
+                                        fontWeight = FontWeight.Medium,
+                                        maxLines = 1
+                                    )
+                                }
+                                if (selectedCustomer != null) {
+                                    IconButton(onClick = { viewModel.selectCustomer(null) }, modifier = Modifier.size(24.dp)) {
+                                        Icon(Icons.Default.Close, contentDescription = null, modifier = Modifier.size(16.dp))
+                                    }
+                                } else {
+                                    Icon(Icons.Default.ArrowDropDown, contentDescription = null)
+                                }
+                            }
 
-            // Cart Items Header
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = "سلة المبيعات (${cartItems.size})",
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 14.sp
-                )
-                if (cartItems.isNotEmpty()) {
-                    Text(
-                        text = "المجموع: ${Formatters.formatMoney(subtotal, settings)}",
-                        fontWeight = FontWeight.Medium,
-                        color = MaterialTheme.colorScheme.primary
-                    )
-                }
-            }
+                            Spacer(modifier = Modifier.height(10.dp))
 
-            Spacer(modifier = Modifier.height(6.dp))
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(text = "سلة المبيعات (${cartItems.size})", fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                                if (cartItems.isNotEmpty()) {
+                                    TextButton(onClick = { viewModel.clearCart() }, contentPadding = PaddingValues(0.dp)) {
+                                        Text("تفريغ", color = MaterialTheme.colorScheme.error, fontSize = 12.sp)
+                                    }
+                                }
+                            }
 
-            // Cart Items List
-            if (cartItems.isEmpty()) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(110.dp)
-                        .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f), RoundedCornerShape(10.dp)),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(
-                        text = "السلة فارغة، اختر من المنتجات بالأسفل أو امسح الباركود",
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        fontSize = 12.sp
-                    )
+                            Spacer(modifier = Modifier.height(6.dp))
+
+                            if (cartItems.isEmpty()) {
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .weight(1f),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                        Icon(Icons.Default.ShoppingCart, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f), modifier = Modifier.size(48.dp))
+                                        Spacer(modifier = Modifier.height(8.dp))
+                                        Text("السلة فارغة، اختر الأصناف من اليسار", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
+                                    }
+                                }
+                            } else {
+                                LazyColumn(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .weight(1f),
+                                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                                ) {
+                                    itemsIndexed(cartItems) { index, item ->
+                                        PosCartItemRow(
+                                            item = item,
+                                            settings = settings,
+                                            onQuantityChange = { viewModel.updateCartItemQuantity(index, it) },
+                                            onToggleUnit = { viewModel.toggleCartItemUnit(index) },
+                                            onRemove = { viewModel.removeFromCart(index) }
+                                        )
+                                    }
+                                }
+                            }
+
+                            Spacer(modifier = Modifier.height(8.dp))
+
+                            // Summary & Checkout
+                            HorizontalDivider()
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                                Text("المجموع الفرعي:", fontSize = 13.sp)
+                                Text(Formatters.formatMoney(subtotal, settings), fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                            }
+                            if (taxRate > 0) {
+                                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                                    Text("الضريبة (${(taxRate * 100).toInt()}%):", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    Text(Formatters.formatMoney(calculatedTax, settings), fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                }
+                            }
+                            Spacer(modifier = Modifier.height(6.dp))
+                            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                                Text("الإجمالي النهائي:", fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                                Text(
+                                    Formatters.formatMoney(totalAmount, settings),
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 18.sp,
+                                    color = MaterialTheme.colorScheme.primary
+                                )
+                            }
+                            Spacer(modifier = Modifier.height(10.dp))
+                            Button(
+                                onClick = {
+                                    if (currentUser.canSell) showCheckoutDialog = true
+                                    else viewModel.showMessage("حسابك الحالي لا يمتلك صلاحية إجراء المبيعات")
+                                },
+                                enabled = cartItems.isNotEmpty() && currentUser.canSell,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(48.dp),
+                                shape = RoundedCornerShape(10.dp)
+                            ) {
+                                Icon(Icons.Default.CheckCircle, contentDescription = null)
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text("متابعة الدفع وحفظ الفاتورة", fontWeight = FontWeight.Bold)
+                            }
+                            if (cartItems.isNotEmpty()) {
+                                Spacer(modifier = Modifier.height(6.dp))
+                                OutlinedButton(
+                                    onClick = { showSaveQuotationDialog = true },
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(40.dp),
+                                    shape = RoundedCornerShape(8.dp)
+                                ) {
+                                    Icon(Icons.Default.RequestQuote, contentDescription = null, modifier = Modifier.size(18.dp))
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text("حفظ كعرض أسعار", fontSize = 12.sp)
+                                }
+                            }
+                        }
+                    }
                 }
             } else {
-                LazyColumn(
+                // ==================== MOBILE PHONE VIEW (FULL SCREEN SCROLL TABS) ====================
+                Column(
                     modifier = Modifier
-                        .fillMaxWidth()
-                        .weight(1f),
-                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                        .fillMaxSize()
+                        .padding(12.dp)
                 ) {
-                    itemsIndexed(cartItems) { index, item ->
-                        PosCartItemRow(
-                            item = item,
-                            settings = settings,
-                            onQuantityChange = { viewModel.updateCartItemQuantity(index, it) },
-                            onToggleUnit = { viewModel.toggleCartItemUnit(index) },
-                            onRemove = { viewModel.removeFromCart(index) }
-                        )
+                    if (!currentUser.canSell) {
+                        Card(
+                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer),
+                            shape = RoundedCornerShape(8.dp),
+                            modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp)
+                        ) {
+                            Row(modifier = Modifier.padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
+                                Icon(Icons.Default.Lock, contentDescription = null, tint = MaterialTheme.colorScheme.error)
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    text = "تنبيه: حساب (${currentUser.fullName}) لا يمتلك صلاحية مبيعات.",
+                                    fontSize = 12.sp,
+                                    color = MaterialTheme.colorScheme.onErrorContainer
+                                )
+                            }
+                        }
                     }
-                }
-            }
 
-            Spacer(modifier = Modifier.height(12.dp))
-
-            // Available Products Grid/List
-            Text(
-                text = "المنتجات المتاحة للبيع",
-                fontWeight = FontWeight.Bold,
-                fontSize = 14.sp
-            )
-            Spacer(modifier = Modifier.height(6.dp))
-
-            LazyColumn(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .heightIn(max = 220.dp),
-                verticalArrangement = Arrangement.spacedBy(6.dp)
-            ) {
-                if (filteredProducts.isEmpty()) {
-                    item {
-                        Text(
-                            text = "لا توجد منتجات مطابقة",
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            fontSize = 12.sp,
-                            modifier = Modifier.padding(8.dp)
-                        )
+                    // Customer Selector
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(8.dp))
+                            .clickable { showCustomerPicker = true }
+                            .padding(horizontal = 12.dp, vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
+                            Icon(Icons.Default.Person, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = if (selectedCustomer != null) "العميل: ${selectedCustomer?.name} (${Formatters.formatMoney(selectedCustomer?.currentBalance ?: 0.0, settings)})"
+                                else "العميل: نقدي (اضغط للتحديد)",
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Medium,
+                                maxLines = 1
+                            )
+                        }
+                        if (selectedCustomer != null) {
+                            IconButton(onClick = { viewModel.selectCustomer(null) }, modifier = Modifier.size(24.dp)) {
+                                Icon(Icons.Default.Close, contentDescription = null, modifier = Modifier.size(16.dp))
+                            }
+                        } else {
+                            Icon(Icons.Default.ArrowDropDown, contentDescription = null)
+                        }
                     }
-                } else {
-                    items(filteredProducts.size) { i ->
-                        val p = filteredProducts[i]
-                        PosProductItemCard(
-                            product = p,
-                            settings = settings,
-                            onAddToCart = { isMain ->
-                                viewModel.addToCart(p, isMainUnit = isMain, quantity = 1.0)
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    // Mobile Primary Navigation Tabs
+                    PrimaryTabRow(selectedTabIndex = mobileTab) {
+                        Tab(
+                            selected = mobileTab == 0,
+                            onClick = { mobileTab = 0 },
+                            text = { Text("المنتجات (${filteredProducts.size})", fontSize = 13.sp) },
+                            icon = { Icon(Icons.Default.Inventory, contentDescription = null, modifier = Modifier.size(18.dp)) }
+                        )
+                        Tab(
+                            selected = mobileTab == 1,
+                            onClick = { mobileTab = 1 },
+                            text = { Text("سلة البيع (${cartItems.size})", fontSize = 13.sp) },
+                            icon = {
+                                BadgedBox(badge = {
+                                    if (cartItems.isNotEmpty()) {
+                                        Badge { Text("${cartItems.size}") }
+                                    }
+                                }) {
+                                    Icon(Icons.Default.ShoppingCart, contentDescription = null, modifier = Modifier.size(18.dp))
+                                }
                             }
                         )
+                    }
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    if (mobileTab == 0) {
+                        // Search & Barcode
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            OutlinedTextField(
+                                value = searchQuery,
+                                onValueChange = { searchQuery = it },
+                                placeholder = { Text("بحث باسم المنتج أو الباركود...") },
+                                leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
+                                trailingIcon = {
+                                    if (searchQuery.isNotEmpty()) {
+                                        IconButton(onClick = { searchQuery = "" }) {
+                                            Icon(Icons.Default.Close, contentDescription = null)
+                                        }
+                                    }
+                                },
+                                singleLine = true,
+                                modifier = Modifier.weight(1f)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            FilledTonalIconButton(onClick = { showBarcodeScanner = true }) {
+                                Icon(Icons.Default.CameraAlt, contentDescription = "مسح باركود")
+                            }
+                        }
+
+                        if (categories.isNotEmpty()) {
+                            Spacer(modifier = Modifier.height(6.dp))
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .horizontalScroll(rememberScrollState()),
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                FilterChip(
+                                    selected = selectedCategory == null,
+                                    onClick = { selectedCategory = null },
+                                    label = { Text("الكل", fontSize = 12.sp) }
+                                )
+                                categories.forEach { cat ->
+                                    FilterChip(
+                                        selected = selectedCategory == cat,
+                                        onClick = { selectedCategory = if (selectedCategory == cat) null else cat },
+                                        label = { Text(cat, fontSize = 12.sp) }
+                                    )
+                                }
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(8.dp))
+
+                        if (filteredProducts.isEmpty()) {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .weight(1f),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text("لا توجد منتجات مطابقة للبحث", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                        } else {
+                            // Full-height scrollable LazyColumn for all products on mobile!
+                            LazyColumn(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .weight(1f),
+                                verticalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                items(filteredProducts) { p ->
+                                    PosProductItemCard(
+                                        product = p,
+                                        settings = settings,
+                                        onAddToCart = { isMain ->
+                                            viewModel.addToCart(p, isMainUnit = isMain, quantity = 1.0)
+                                        }
+                                    )
+                                }
+                            }
+                        }
+
+                        // Sticky quick checkout summary on product tab if cart has items
+                        if (cartItems.isNotEmpty()) {
+                            Spacer(modifier = Modifier.height(6.dp))
+                            Card(
+                                shape = RoundedCornerShape(10.dp),
+                                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(horizontal = 12.dp, vertical = 8.dp),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Column {
+                                        Text(
+                                            text = "${cartItems.size} أصناف في السلة",
+                                            fontSize = 12.sp,
+                                            color = MaterialTheme.colorScheme.onPrimaryContainer
+                                        )
+                                        Text(
+                                            text = Formatters.formatMoney(totalAmount, settings),
+                                            fontWeight = FontWeight.Bold,
+                                            fontSize = 15.sp,
+                                            color = MaterialTheme.colorScheme.primary
+                                        )
+                                    }
+                                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                        OutlinedButton(
+                                            onClick = { mobileTab = 1 },
+                                            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp)
+                                        ) {
+                                            Text("عرض السلة", fontSize = 12.sp)
+                                        }
+                                        Button(
+                                            onClick = {
+                                                if (currentUser.canSell) showCheckoutDialog = true
+                                                else viewModel.showMessage("حسابك لا يمتلك صلاحية مبيعات")
+                                            },
+                                            enabled = currentUser.canSell,
+                                            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp)
+                                        ) {
+                                            Text("دفع فوري", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    } else {
+                        // Mobile Tab 1: Cart screen (full height scrollable list + summary)
+                        if (cartItems.isEmpty()) {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .weight(1f),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                    Icon(Icons.Default.ShoppingCart, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f), modifier = Modifier.size(56.dp))
+                                    Spacer(modifier = Modifier.height(10.dp))
+                                    Text("سلة المبيعات فارغة", fontWeight = FontWeight.Bold)
+                                    Spacer(modifier = Modifier.height(6.dp))
+                                    Text("اضغط على الزر بالأسفل لاختيار الأصناف", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
+                                    Spacer(modifier = Modifier.height(12.dp))
+                                    Button(onClick = { mobileTab = 0 }) {
+                                        Icon(Icons.Default.ArrowBack, contentDescription = null)
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        Text("تصفح وإضافة الأصناف")
+                                    }
+                                }
+                            }
+                        } else {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(text = "أصناف السلة (${cartItems.size})", fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                                TextButton(onClick = { viewModel.clearCart() }) {
+                                    Text("تفريغ السلة", color = MaterialTheme.colorScheme.error, fontSize = 12.sp)
+                                }
+                            }
+
+                            LazyColumn(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .weight(1f),
+                                verticalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                itemsIndexed(cartItems) { index, item ->
+                                    PosCartItemRow(
+                                        item = item,
+                                        settings = settings,
+                                        onQuantityChange = { viewModel.updateCartItemQuantity(index, it) },
+                                        onToggleUnit = { viewModel.toggleCartItemUnit(index) },
+                                        onRemove = { viewModel.removeFromCart(index) }
+                                    )
+                                }
+                            }
+
+                            Spacer(modifier = Modifier.height(8.dp))
+
+                            // Summary card & checkout
+                            Card(
+                                shape = RoundedCornerShape(12.dp),
+                                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Column(modifier = Modifier.padding(12.dp)) {
+                                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                                        Text("المجموع:", fontSize = 13.sp)
+                                        Text(Formatters.formatMoney(subtotal, settings), fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                                    }
+                                    if (taxRate > 0) {
+                                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                                            Text("الضريبة (${(taxRate * 100).toInt()}%):", fontSize = 12.sp)
+                                            Text(Formatters.formatMoney(calculatedTax, settings), fontSize = 12.sp)
+                                        }
+                                    }
+                                    Spacer(modifier = Modifier.height(4.dp))
+                                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                                        Text("الإجمالي النهائي:", fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                                        Text(
+                                            Formatters.formatMoney(totalAmount, settings),
+                                            fontWeight = FontWeight.Bold,
+                                            fontSize = 17.sp,
+                                            color = MaterialTheme.colorScheme.primary
+                                        )
+                                    }
+                                    Spacer(modifier = Modifier.height(8.dp))
+                                    Button(
+                                        onClick = {
+                                            if (currentUser.canSell) showCheckoutDialog = true
+                                            else viewModel.showMessage("حسابك الحالي لا يمتلك صلاحية مبيعات")
+                                        },
+                                        enabled = currentUser.canSell,
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .height(46.dp),
+                                        shape = RoundedCornerShape(8.dp)
+                                    ) {
+                                        Icon(Icons.Default.CheckCircle, contentDescription = null)
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        Text("متابعة الدفع وحفظ الفاتورة", fontWeight = FontWeight.Bold)
+                                    }
+                                    Spacer(modifier = Modifier.height(4.dp))
+                                    OutlinedButton(
+                                        onClick = { showSaveQuotationDialog = true },
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .height(38.dp),
+                                        shape = RoundedCornerShape(8.dp)
+                                    ) {
+                                        Icon(Icons.Default.RequestQuote, contentDescription = null, modifier = Modifier.size(16.dp))
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        Text("حفظ كعرض أسعار", fontSize = 12.sp)
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
             }
@@ -349,33 +709,54 @@ fun PosScreen(
 
     // Customer Picker Dialog
     if (showCustomerPicker) {
+        var custSearch by remember { mutableStateOf("") }
+        val filteredCusts = remember(custSearch, customers) {
+            if (custSearch.isBlank()) customers
+            else customers.filter {
+                it.name.contains(custSearch, ignoreCase = true) ||
+                        it.phone.contains(custSearch)
+            }
+        }
+
         AlertDialog(
             onDismissRequest = { showCustomerPicker = false },
             title = { Text("اختر العميل") },
             text = {
-                LazyColumn(modifier = Modifier.fillMaxWidth().height(260.dp)) {
-                    item {
-                        ListItem(
-                            headlineContent = { Text("عميل نقدي (بدون حساب)") },
-                            modifier = Modifier.clickable {
-                                viewModel.selectCustomer(null)
-                                showCustomerPicker = false
-                            }
-                        )
-                        HorizontalDivider()
-                    }
-                    items(customers.size) { i ->
-                        val c = customers[i]
-                        ListItem(
-                            headlineContent = { Text(c.name) },
-                            supportingContent = {
-                                Text("الرصيد: ${Formatters.formatMoney(c.currentBalance, settings)} | الهاتف: ${c.phone}")
-                            },
-                            modifier = Modifier.clickable {
-                                viewModel.selectCustomer(c)
-                                showCustomerPicker = false
-                            }
-                        )
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    OutlinedTextField(
+                        value = custSearch,
+                        onValueChange = { custSearch = it },
+                        placeholder = { Text("بحث باسم العميل أو الهاتف...") },
+                        leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    LazyColumn(modifier = Modifier.fillMaxWidth().heightIn(max = 280.dp)) {
+                        item {
+                            ListItem(
+                                headlineContent = { Text("عميل نقدي (بدون حساب)") },
+                                modifier = Modifier.clickable {
+                                    viewModel.selectCustomer(null)
+                                    showCustomerPicker = false
+                                }
+                            )
+                            HorizontalDivider()
+                        }
+                        items(filteredCusts.size) { i ->
+                            val c = filteredCusts[i]
+                            ListItem(
+                                headlineContent = { Text(c.name) },
+                                supportingContent = {
+                                    Text("الرصيد: ${Formatters.formatMoney(c.currentBalance, settings)} | الهاتف: ${c.phone}")
+                                },
+                                modifier = Modifier.clickable {
+                                    viewModel.selectCustomer(c)
+                                    showCustomerPicker = false
+                                }
+                            )
+                            HorizontalDivider()
+                        }
                     }
                 }
             },
@@ -450,7 +831,7 @@ fun PosScreen(
                 LazyColumn(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .heightIn(max = 500.dp),
+                        .heightIn(max = 400.dp),
                     verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
                     // 1. Payment Type (Cash vs Credit)
@@ -859,32 +1240,36 @@ fun PosCartItemRow(
     onRemove: () -> Unit
 ) {
     Card(
-        shape = RoundedCornerShape(8.dp),
+        shape = RoundedCornerShape(12.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
         elevation = CardDefaults.cardElevation(1.dp),
         modifier = Modifier.fillMaxWidth()
     ) {
         Row(
-            modifier = Modifier.padding(8.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(10.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = item.product.name,
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 13.sp
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Bold
                 )
+                Spacer(modifier = Modifier.height(2.dp))
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
                         text = "السعر: ${Formatters.formatMoney(item.unitPrice, settings)}",
-                        fontSize = 11.sp,
+                        style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                     Spacer(modifier = Modifier.width(6.dp))
                     SuggestionChip(
                         onClick = onToggleUnit,
-                        label = { Text(text = item.unitName, fontSize = 10.sp) },
-                        modifier = Modifier.height(24.dp)
+                        label = { Text(text = item.unitName, style = MaterialTheme.typography.labelSmall) },
+                        modifier = Modifier.height(26.dp)
                     )
                 }
             }
@@ -893,37 +1278,59 @@ fun PosCartItemRow(
             Row(verticalAlignment = Alignment.CenterVertically) {
                 FilledIconButton(
                     onClick = { onQuantityChange(item.quantity - 1.0) },
-                    modifier = Modifier.size(28.dp),
-                    shape = CircleShape
+                    modifier = Modifier.size(30.dp),
+                    shape = CircleShape,
+                    colors = IconButtonDefaults.filledIconButtonColors(
+                        containerColor = MaterialTheme.colorScheme.surfaceVariant
+                    )
                 ) {
-                    Icon(Icons.Default.Remove, contentDescription = "نقص", modifier = Modifier.size(16.dp))
+                    Icon(
+                        Icons.Default.Remove,
+                        contentDescription = "نقص",
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.size(16.dp)
+                    )
                 }
                 Text(
                     text = "${item.quantity.toInt()}",
                     fontWeight = FontWeight.Bold,
-                    fontSize = 13.sp,
+                    style = MaterialTheme.typography.titleSmall,
                     modifier = Modifier.padding(horizontal = 8.dp)
                 )
                 FilledIconButton(
                     onClick = { onQuantityChange(item.quantity + 1.0) },
-                    modifier = Modifier.size(28.dp),
-                    shape = CircleShape
+                    modifier = Modifier.size(30.dp),
+                    shape = CircleShape,
+                    colors = IconButtonDefaults.filledIconButtonColors(
+                        containerColor = MaterialTheme.colorScheme.primaryContainer
+                    )
                 ) {
-                    Icon(Icons.Default.Add, contentDescription = "زيادة", modifier = Modifier.size(16.dp))
+                    Icon(
+                        Icons.Default.Add,
+                        contentDescription = "زيادة",
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(16.dp)
+                    )
                 }
             }
 
             Spacer(modifier = Modifier.width(10.dp))
 
-            Text(
-                text = Formatters.formatMoney(item.total, settings),
-                fontWeight = FontWeight.Bold,
-                fontSize = 12.sp,
-                color = MaterialTheme.colorScheme.primary
-            )
-
-            IconButton(onClick = onRemove, modifier = Modifier.size(28.dp)) {
-                Icon(Icons.Default.DeleteOutline, contentDescription = "حذف", tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(18.dp))
+            Column(horizontalAlignment = Alignment.End) {
+                Text(
+                    text = Formatters.formatMoney(item.total, settings),
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.primary
+                )
+                IconButton(onClick = onRemove, modifier = Modifier.size(24.dp)) {
+                    Icon(
+                        Icons.Default.DeleteOutline,
+                        contentDescription = "حذف",
+                        tint = MaterialTheme.colorScheme.error,
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
             }
         }
     }
@@ -935,37 +1342,81 @@ fun PosProductItemCard(
     settings: com.example.data.model.StoreSettings?,
     onAddToCart: (Boolean) -> Unit
 ) {
+    val subUnits = product.currentStockSubUnits
+    val mainStock = if (product.conversionFactor > 0) subUnits / product.conversionFactor else subUnits
+    val isOutOfStock = subUnits <= 0
+    val isLowStock = !isOutOfStock && subUnits <= product.minStockSubUnits
+
     Card(
-        shape = RoundedCornerShape(8.dp),
+        shape = RoundedCornerShape(12.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
         elevation = CardDefaults.cardElevation(1.dp),
         modifier = Modifier.fillMaxWidth()
     ) {
         Row(
-            modifier = Modifier.padding(8.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(10.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Column(modifier = Modifier.weight(1f)) {
-                Text(text = product.name, fontWeight = FontWeight.Bold, fontSize = 13.sp)
-                val subUnits = product.currentStockSubUnits
-                val mainStock = if (product.conversionFactor > 0) subUnits / product.conversionFactor else subUnits
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = product.name,
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    if (isOutOfStock) {
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Surface(
+                            shape = RoundedCornerShape(4.dp),
+                            color = MaterialTheme.colorScheme.error.copy(alpha = 0.12f)
+                        ) {
+                            Text(
+                                text = "نفذ",
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.error,
+                                modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp)
+                            )
+                        }
+                    } else if (isLowStock) {
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Surface(
+                            shape = RoundedCornerShape(4.dp),
+                            color = Color(0xFFD97706).copy(alpha = 0.12f)
+                        ) {
+                            Text(
+                                text = "منخفض",
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFFD97706),
+                                modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp)
+                            )
+                        }
+                    }
+                }
+                Spacer(modifier = Modifier.height(2.dp))
                 Text(
                     text = "المخزون: %.1f %s (%.0f %s)".format(mainStock, product.mainUnit, subUnits, product.subUnit),
-                    fontSize = 11.sp,
-                    color = if (subUnits <= product.minStockSubUnits) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant
+                    style = MaterialTheme.typography.bodySmall,
+                    color = if (isOutOfStock || isLowStock) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
 
             // Button to add main unit
             Button(
                 onClick = { onAddToCart(true) },
-                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
-                shape = RoundedCornerShape(6.dp),
-                modifier = Modifier.height(32.dp)
+                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+                shape = RoundedCornerShape(8.dp),
+                modifier = Modifier.height(34.dp)
             ) {
                 Text(
                     text = "${product.mainUnit} (${Formatters.formatMoney(product.cashSalePrice, settings)})",
-                    fontSize = 10.sp
+                    style = MaterialTheme.typography.labelSmall,
+                    fontWeight = FontWeight.Bold
                 )
             }
 
@@ -975,13 +1426,14 @@ fun PosProductItemCard(
                 val subPrice = product.cashSalePrice / product.conversionFactor
                 OutlinedButton(
                     onClick = { onAddToCart(false) },
-                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
-                    shape = RoundedCornerShape(6.dp),
-                    modifier = Modifier.height(32.dp)
+                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+                    shape = RoundedCornerShape(8.dp),
+                    modifier = Modifier.height(34.dp)
                 ) {
                     Text(
                         text = "${product.subUnit} (${Formatters.formatMoney(subPrice, settings)})",
-                        fontSize = 10.sp
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.Bold
                     )
                 }
             }
