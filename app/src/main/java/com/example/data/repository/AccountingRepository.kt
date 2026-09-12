@@ -127,6 +127,10 @@ class AccountingRepository(private val dao: AppDao) {
         taxAmount: Double,
         paidAmount: Double,
         paymentType: String, // CASH or CREDIT
+        paymentMethod: String = "كاش", // كاش / نقداً, إلكتروني / شبكة, تحويل بنكي, آجل
+        paidCurrency: String = "العملة الأساسية",
+        paidCurrencyAmount: Double = 0.0,
+        exchangeRate: Double = 1.0,
         notes: String,
         currentUser: String
     ): Long {
@@ -144,6 +148,7 @@ class AccountingRepository(private val dao: AppDao) {
             invoiceNumber = invoiceNumber,
             invoiceType = "SALE",
             paymentType = paymentType,
+            paymentMethod = paymentMethod,
             partyId = customer?.id,
             partyName = customer?.name ?: "عميل نقدي",
             subtotal = subtotal,
@@ -152,6 +157,9 @@ class AccountingRepository(private val dao: AppDao) {
             totalAmount = totalAmount,
             paidAmount = actualPaid,
             remainingAmount = remainingAmount,
+            paidCurrency = paidCurrency,
+            paidCurrencyAmount = if (paidCurrencyAmount > 0) paidCurrencyAmount else actualPaid,
+            exchangeRate = exchangeRate,
             totalCost = totalCost,
             profit = profit,
             notes = notes,
@@ -203,6 +211,15 @@ class AccountingRepository(private val dao: AppDao) {
         // Update Cash register
         if (actualPaid > 0) {
             val currentCash = getLatestCashBalance()
+            val methodTag = when (paymentMethod) {
+                "إلكتروني / شبكة" -> "[دفع إلكتروني]"
+                "تحويل بنكي" -> "[تحويل بنكي]"
+                "آجل" -> "[دفعة مقدمة]"
+                else -> "[نقداً]"
+            }
+            val currTag = if (paidCurrency.isNotBlank() && paidCurrency != "العملة الأساسية") {
+                " ($paidCurrencyAmount $paidCurrency)"
+            } else ""
             dao.insertCashTransaction(
                 CashTransaction(
                     type = "IN",
@@ -211,7 +228,7 @@ class AccountingRepository(private val dao: AppDao) {
                     referenceNumber = invoiceNumber,
                     amount = actualPaid,
                     balanceAfter = currentCash + actualPaid,
-                    notes = "تحصيل مبيعات فاتورة $invoiceNumber",
+                    notes = "تحصيل مبيعات فاتورة $invoiceNumber $methodTag$currTag",
                     createdBy = currentUser
                 )
             )
@@ -950,5 +967,45 @@ class AccountingRepository(private val dao: AppDao) {
             sb.append("\"${dateFormat.format(Date(c.createdAt))}\"\n")
         }
         return sb.toString()
+    }
+
+    // --- Currency Management ---
+    val allCurrencyRates: Flow<List<CurrencyRate>> = dao.getAllCurrencyRates()
+
+    suspend fun getAllCurrencyRatesDirect(): List<CurrencyRate> = dao.getAllCurrencyRatesDirect()
+
+    suspend fun saveCurrencyRate(rate: CurrencyRate): Long {
+        if (rate.isBase) {
+            val all = dao.getAllCurrencyRatesDirect()
+            for (c in all) {
+                if (c.id != rate.id && c.isBase) {
+                    dao.updateCurrencyRate(c.copy(isBase = false))
+                }
+            }
+        }
+        return if (rate.id == 0L) {
+            dao.insertCurrencyRate(rate)
+        } else {
+            dao.updateCurrencyRate(rate)
+            rate.id
+        }
+    }
+
+    suspend fun deleteCurrencyRate(rate: CurrencyRate) {
+        dao.deleteCurrencyRate(rate)
+    }
+
+    suspend fun initializeDefaultCurrenciesIfEmpty(baseSymbol: String = "ر.س") {
+        val current = dao.getAllCurrencyRatesDirect()
+        if (current.isEmpty()) {
+            val defaults = listOf(
+                CurrencyRate(code = "SAR", name = "ريال سعودي", symbol = "ر.س", rateToBase = 1.0, isBase = true),
+                CurrencyRate(code = "USD", name = "دولار أمريكي", symbol = "$", rateToBase = 3.75, isBase = false),
+                CurrencyRate(code = "YER", name = "ريال يمني", symbol = "ر.ي", rateToBase = 0.007, isBase = false),
+                CurrencyRate(code = "AED", name = "درهم إماراتي", symbol = "د.إ", rateToBase = 1.02, isBase = false),
+                CurrencyRate(code = "KWD", name = "دينار كويتي", symbol = "د.ك", rateToBase = 12.2, isBase = false)
+            )
+            dao.insertCurrencyRates(defaults)
+        }
     }
 }

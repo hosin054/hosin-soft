@@ -33,16 +33,17 @@ import com.example.ui.screens.quotations.QuotationsScreen
 import com.example.ui.screens.labels.BarcodeLabelScreen
 import com.example.ui.screens.reports.ReportsScreen
 import com.example.ui.screens.settings.AuditLogsScreen
+import com.example.ui.screens.settings.CurrenciesScreen
 import com.example.ui.screens.settings.SettingsScreen
 import com.example.ui.screens.setup.SetupScreen
 import com.example.ui.screens.vouchers.VouchersScreen
 
 sealed class BottomNavItem(val route: String, val title: String, val icon: ImageVector) {
     object Dashboard : BottomNavItem(Screen.Dashboard.route, "الرئيسية", Icons.Default.Dashboard)
-    object Pos : BottomNavItem(Screen.Pos.route, "نقطة بيع", Icons.Default.PointOfSale)
+    object Pos : BottomNavItem(Screen.Pos.route, "بيع للزبون", Icons.Default.PointOfSale)
     object Products : BottomNavItem(Screen.Products.route, "المنتجات", Icons.Default.Inventory2)
     object Parties : BottomNavItem(Screen.Parties.route, "الحسابات", Icons.Default.People)
-    object Purchases : BottomNavItem(Screen.Purchases.route, "المشتريات", Icons.Default.ShoppingCart)
+    object Purchases : BottomNavItem(Screen.Purchases.route, "مشتريات المحل", Icons.Default.ShoppingCart)
 }
 
 @Composable
@@ -286,6 +287,13 @@ fun AppNavigation(viewModel: MainViewModel) {
 
             composable(Screen.AuditLogs.route) {
                 AuditLogsScreen(
+                    viewModel = viewModel,
+                    onBack = { navController.popBackStack() }
+                )
+            }
+
+            composable(Screen.Currencies.route) {
+                CurrenciesScreen(
                     viewModel = viewModel,
                     onBack = { navController.popBackStack() }
                 )

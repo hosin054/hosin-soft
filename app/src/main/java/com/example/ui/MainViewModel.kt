@@ -19,6 +19,15 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     val settings: StateFlow<StoreSettings?> = repository.settings
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
 
+    val allCurrencyRates: StateFlow<List<CurrencyRate>> = repository.allCurrencyRates
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    init {
+        viewModelScope.launch {
+            repository.initializeDefaultCurrenciesIfEmpty()
+        }
+    }
+
     // Current User
     private val _currentUser = MutableStateFlow(
         User(
@@ -213,6 +222,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun completeSale(
         paymentType: String,
+        paymentMethod: String = "كاش",
+        paidCurrency: String = "العملة الأساسية",
+        paidCurrencyAmount: Double = 0.0,
+        exchangeRate: Double = 1.0,
         paidAmount: Double,
         notes: String,
         onSuccess: (Long) -> Unit
@@ -247,6 +260,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     taxAmount = _posTax.value,
                     paidAmount = paidAmount,
                     paymentType = paymentType,
+                    paymentMethod = paymentMethod,
+                    paidCurrency = paidCurrency,
+                    paidCurrencyAmount = paidCurrencyAmount,
+                    exchangeRate = exchangeRate,
                     notes = notes,
                     currentUser = _currentUser.value.fullName
                 )
@@ -255,6 +272,54 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 onSuccess(invoiceId)
             } catch (e: Exception) {
                 showMessage("خطأ أثناء إتمام الفاتورة: ${e.message}")
+            }
+        }
+    }
+
+    // --- Currency Exchange Rate Management ---
+    fun saveCurrencyRate(rate: CurrencyRate, onSuccess: () -> Unit = {}) {
+        viewModelScope.launch {
+            try {
+                repository.saveCurrencyRate(rate)
+                showMessage("تم حفظ بيانات وسعر صرف العملة بنجاح")
+                onSuccess()
+            } catch (e: Exception) {
+                showMessage("خطأ أثناء حفظ العملة: ${e.message}")
+            }
+        }
+    }
+
+    fun deleteCurrencyRate(rate: CurrencyRate) {
+        viewModelScope.launch {
+            try {
+                if (rate.isBase) {
+                    showMessage("لا يمكن حذف العملة الأساسية للنظام")
+                    return@launch
+                }
+                repository.deleteCurrencyRate(rate)
+                showMessage("تم حذف العملة")
+            } catch (e: Exception) {
+                showMessage("خطأ أثناء حذف العملة: ${e.message}")
+            }
+        }
+    }
+
+    fun resetCurrenciesToDefault() {
+        viewModelScope.launch {
+            try {
+                val defaults = listOf(
+                    CurrencyRate(code = "SAR", name = "ريال سعودي", symbol = "ر.س", rateToBase = 1.0, isBase = true),
+                    CurrencyRate(code = "USD", name = "دولار أمريكي", symbol = "$", rateToBase = 3.75, isBase = false),
+                    CurrencyRate(code = "YER", name = "ريال يمني", symbol = "ر.ي", rateToBase = 0.007, isBase = false),
+                    CurrencyRate(code = "AED", name = "درهم إماراتي", symbol = "د.إ", rateToBase = 1.02, isBase = false),
+                    CurrencyRate(code = "KWD", name = "دينار كويتي", symbol = "د.ك", rateToBase = 12.2, isBase = false)
+                )
+                for (r in defaults) {
+                    repository.saveCurrencyRate(r)
+                }
+                showMessage("تم تحديث واستعادة العملات الافتراضية بنجاح")
+            } catch (e: Exception) {
+                showMessage("خطأ: ${e.message}")
             }
         }
     }

@@ -93,12 +93,24 @@ data class Supplier(
     val createdAt: Long = System.currentTimeMillis()
 )
 
+@Entity(tableName = "currency_rates")
+data class CurrencyRate(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val code: String, // SAR, USD, YER, AED, etc.
+    val name: String, // ريال سعودي, دولار أمريكي, ريال يمني, إلخ
+    val symbol: String, // ر.س, $, ر.ي, إلخ
+    val rateToBase: Double = 1.0, // كم وحدة من العملة الأساسية تساوي 1 وحدة من هذه العملة
+    val isBase: Boolean = false,
+    val updatedAt: Long = System.currentTimeMillis()
+)
+
 @Entity(tableName = "invoices")
 data class Invoice(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
     val invoiceNumber: String,
     val invoiceType: String, // SALE, PURCHASE
     val paymentType: String, // CASH, CREDIT
+    val paymentMethod: String = "كاش", // كاش / نقداً, إلكتروني / شبكة, تحويل بنكي, آجل
     val partyId: Long? = null, // customerId or supplierId
     val partyName: String = "",
     val subtotal: Double = 0.0,
@@ -107,6 +119,9 @@ data class Invoice(
     val totalAmount: Double = 0.0,
     val paidAmount: Double = 0.0,
     val remainingAmount: Double = 0.0,
+    val paidCurrency: String = "العملة الأساسية",
+    val paidCurrencyAmount: Double = 0.0,
+    val exchangeRate: Double = 1.0,
     val totalCost: Double = 0.0,
     val profit: Double = 0.0, // (totalAmount - taxAmount) - totalCost
     val dueDate: Long? = null,

@@ -216,4 +216,29 @@ interface AppDao {
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertAuditLog(log: AuditLog): Long
+
+    // --- Currency Rates ---
+    @Query("SELECT * FROM currency_rates ORDER BY isBase DESC, id ASC")
+    fun getAllCurrencyRates(): Flow<List<CurrencyRate>>
+
+    @Query("SELECT * FROM currency_rates")
+    suspend fun getAllCurrencyRatesDirect(): List<CurrencyRate>
+
+    @Query("SELECT * FROM currency_rates WHERE isBase = 1 LIMIT 1")
+    suspend fun getBaseCurrency(): CurrencyRate?
+
+    @Query("SELECT * FROM currency_rates WHERE code = :code LIMIT 1")
+    suspend fun getCurrencyByCode(code: String): CurrencyRate?
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertCurrencyRate(currencyRate: CurrencyRate): Long
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertCurrencyRates(currencyRates: List<CurrencyRate>)
+
+    @Update
+    suspend fun updateCurrencyRate(currencyRate: CurrencyRate)
+
+    @Delete
+    suspend fun deleteCurrencyRate(currencyRate: CurrencyRate)
 }

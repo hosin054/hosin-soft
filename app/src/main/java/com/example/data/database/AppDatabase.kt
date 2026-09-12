@@ -15,6 +15,7 @@ import com.example.data.model.*
         Product::class,
         Customer::class,
         Supplier::class,
+        CurrencyRate::class,
         Invoice::class,
         InvoiceItem::class,
         Voucher::class,
@@ -23,7 +24,7 @@ import com.example.data.model.*
         InventoryTransaction::class,
         AuditLog::class
     ],
-    version = 1,
+    version = 2,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {

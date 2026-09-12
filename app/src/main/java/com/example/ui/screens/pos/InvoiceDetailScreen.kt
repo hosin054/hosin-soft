@@ -116,7 +116,14 @@ fun InvoiceDetailScreen(
                             Text(text = "رقم الفاتورة: ${invoice.invoiceNumber}", fontSize = 13.sp)
                             Text(text = "التاريخ: ${Formatters.formatDate(invoice.createdAt)}", fontSize = 13.sp)
                             Text(text = "الطرف: ${invoice.partyName}", fontSize = 13.sp)
-                            Text(text = "طريقة الدفع: ${if (invoice.paymentType == "CASH") "نقداً" else "آجل"}", fontSize = 13.sp)
+                            Text(text = "طريقة وسيلة الدفع: ${invoice.paymentMethod.ifBlank { if (invoice.paymentType == "CASH") "نقداً" else "آجل" }}", fontSize = 13.sp, fontWeight = FontWeight.Medium)
+                            if (invoice.paidCurrency.isNotBlank() && invoice.paidCurrency != "العملة الأساسية") {
+                                Text(
+                                    text = "عملة الدفع: ${invoice.paidCurrency} (المبلغ: ${invoice.paidCurrencyAmount} - سعر الصرف: ${invoice.exchangeRate})",
+                                    fontSize = 12.sp,
+                                    color = MaterialTheme.colorScheme.primary
+                                )
+                            }
                             Text(text = "المستخدم: ${invoice.createdBy}", fontSize = 13.sp)
                             if (invoice.notes.isNotBlank()) {
                                 Text(text = "ملاحظات: ${invoice.notes}", fontSize = 13.sp)

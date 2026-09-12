@@ -40,6 +40,7 @@ fun PosScreen(
     val selectedCustomer by viewModel.selectedCustomer.collectAsStateWithLifecycle()
     val discount by viewModel.posDiscount.collectAsStateWithLifecycle()
     val tax by viewModel.posTax.collectAsStateWithLifecycle()
+    val currencyRates by viewModel.allCurrencyRates.collectAsStateWithLifecycle()
 
     var searchQuery by remember { mutableStateOf("") }
     var showBarcodeScanner by remember { mutableStateOf(false) }
@@ -301,7 +302,6 @@ fun PosScreen(
         BarcodeScannerDialog(
             onDismiss = { showBarcodeScanner = false },
             onBarcodeScanned = { barcode ->
-                showBarcodeScanner = false
                 val matched = products.find { it.barcode.equals(barcode, ignoreCase = true) || it.sku.equals(barcode, ignoreCase = true) }
                 if (matched != null) {
                     viewModel.addToCart(matched, isMainUnit = true, quantity = 1.0)
@@ -356,203 +356,385 @@ fun PosScreen(
     // Checkout Dialog
     if (showCheckoutDialog) {
         var paymentType by remember { mutableStateOf(if (selectedCustomer != null) "CREDIT" else "CASH") }
-        var paidAmountInput by remember {
-            mutableStateOf(if (paymentType == "CASH") String.format(java.util.Locale.ENGLISH, "%.2f", totalAmount) else "0.0")
+        var paymentMethod by remember { mutableStateOf(if (paymentType == "CREDIT") "آجل" else "كاش") }
+
+        // Currency selection
+        val baseCurrency = remember(currencyRates) {
+            currencyRates.find { it.isBase } ?: currencyRates.firstOrNull()
         }
-        var cashGivenInput by remember { mutableStateOf("") }
+        var selectedCurrencyId by remember {
+            mutableStateOf(baseCurrency?.id ?: currencyRates.firstOrNull()?.id)
+        }
+        val chosenCurrency = remember(currencyRates, selectedCurrencyId) {
+            currencyRates.find { it.id == selectedCurrencyId } ?: baseCurrency ?: com.example.data.model.CurrencyRate(
+                code = "SAR", name = "ريال سعودي", symbol = settings?.currencySymbol ?: "ر.س", rateToBase = 1.0, isBase = true
+            )
+        }
+
+        var customExchangeRateInput by remember(chosenCurrency) {
+            mutableStateOf(String.format(java.util.Locale.ENGLISH, "%.4f", chosenCurrency.rateToBase))
+        }
+        val effectiveRate = customExchangeRateInput.toDoubleOrNull() ?: chosenCurrency.rateToBase
+
         var discountInput by remember { mutableStateOf("0.0") }
         var notesInput by remember { mutableStateOf("") }
 
         val finalDiscount = discountInput.toDoubleOrNull() ?: 0.0
         val finalTotal = maxOf(0.0, subtotal - finalDiscount + calculatedTax)
-        val finalPaid = if (paymentType == "CASH") finalTotal else (paidAmountInput.toDoubleOrNull() ?: 0.0)
-        val remaining = maxOf(0.0, finalTotal - finalPaid)
 
-        val cashGiven = cashGivenInput.toDoubleOrNull() ?: finalTotal
-        val changeDue = maxOf(0.0, cashGiven - finalTotal)
-        val isUnderpaid = paymentType == "CASH" && cashGivenInput.isNotBlank() && cashGiven < finalTotal
+        // Required amount in the chosen currency
+        val requiredInChosenCurrency = if (effectiveRate > 0) finalTotal / effectiveRate else finalTotal
+
+        var paidInCurrencyInput by remember(chosenCurrency, paymentType, finalTotal) {
+            mutableStateOf(
+                if (paymentType == "CASH") String.format(java.util.Locale.ENGLISH, "%.2f", requiredInChosenCurrency)
+                else "0.0"
+            )
+        }
+
+        val paidInChosenCurrency = paidInCurrencyInput.toDoubleOrNull() ?: 0.0
+        // Equivalent in base currency
+        val paidInBase = paidInChosenCurrency * effectiveRate
+        val finalPaidInBase = if (paymentType == "CASH") minOf(finalTotal, paidInBase) else paidInBase
+        val remainingInBase = maxOf(0.0, finalTotal - finalPaidInBase)
+        val remainingInChosen = if (effectiveRate > 0) remainingInBase / effectiveRate else 0.0
+
+        val changeDueInChosen = maxOf(0.0, paidInChosenCurrency - requiredInChosenCurrency)
+        val changeDueInBase = changeDueInChosen * effectiveRate
+        val isUnderpaid = paymentType == "CASH" && paidInCurrencyInput.isNotBlank() && paidInChosenCurrency < (requiredInChosenCurrency - 0.001)
 
         AlertDialog(
             onDismissRequest = { showCheckoutDialog = false },
-            title = { Text("إتمام فاتورة المبيعات") },
+            title = {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Default.Payment, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("إتمام ودفع فاتورة المبيعات", fontWeight = FontWeight.Bold, fontSize = 17.sp)
+                }
+            },
             text = {
-                Column(modifier = Modifier.fillMaxWidth()) {
-                    // Payment type toggle
-                    Row(modifier = Modifier.fillMaxWidth()) {
-                        FilterChip(
-                            selected = paymentType == "CASH",
-                            onClick = {
-                                paymentType = "CASH"
-                                paidAmountInput = String.format(java.util.Locale.ENGLISH, "%.2f", finalTotal)
-                            },
-                            label = { Text("بيع نقدي") },
-                            modifier = Modifier.weight(1f)
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        FilterChip(
-                            selected = paymentType == "CREDIT",
-                            onClick = {
-                                paymentType = "CREDIT"
-                                paidAmountInput = "0.0"
-                            },
-                            label = { Text("بيع آجل (ذمم)") },
-                            modifier = Modifier.weight(1f)
-                        )
-                    }
-
-                    Spacer(modifier = Modifier.height(10.dp))
-
-                    Text(text = "العميل: ${selectedCustomer?.name ?: "عميل نقدي"}", fontWeight = FontWeight.Medium)
-
-                    if (paymentType == "CREDIT" && selectedCustomer == null) {
-                        Text(
-                            text = "تنبيه: يجب تحديد عميل لإجراء البيع الآجل!",
-                            color = MaterialTheme.colorScheme.error,
-                            fontSize = 12.sp
-                        )
-                    }
-
-                    Spacer(modifier = Modifier.height(8.dp))
-
-                    OutlinedTextField(
-                        value = discountInput,
-                        onValueChange = { discountInput = it },
-                        label = { Text("الخصم الإضافي") },
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                        singleLine = true,
-                        modifier = Modifier.fillMaxWidth()
-                    )
-
-                    Spacer(modifier = Modifier.height(8.dp))
-
-                    if (paymentType == "CREDIT") {
-                        OutlinedTextField(
-                            value = paidAmountInput,
-                            onValueChange = { paidAmountInput = it },
-                            label = { Text("المبلغ المدفوع مقدماً") },
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                            singleLine = true,
-                            modifier = Modifier.fillMaxWidth()
-                        )
-                        Spacer(modifier = Modifier.height(8.dp))
-                    } else {
-                        // Cash tender calculator
-                        Text(text = "حاسبة النقد وباقي العميل:", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                LazyColumn(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(max = 500.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    // 1. Payment Type (Cash vs Credit)
+                    item {
+                        Text(text = "نوع الفاتورة:", fontSize = 12.sp, fontWeight = FontWeight.Bold)
                         Spacer(modifier = Modifier.height(4.dp))
+                        Row(modifier = Modifier.fillMaxWidth()) {
+                            FilterChip(
+                                selected = paymentType == "CASH",
+                                onClick = {
+                                    paymentType = "CASH"
+                                    if (paymentMethod == "آجل") paymentMethod = "كاش"
+                                    paidInCurrencyInput = String.format(java.util.Locale.ENGLISH, "%.2f", requiredInChosenCurrency)
+                                },
+                                label = { Text("دفع فوري (نقدي/إلكتروني)") },
+                                modifier = Modifier.weight(1f)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            FilterChip(
+                                selected = paymentType == "CREDIT",
+                                onClick = {
+                                    paymentType = "CREDIT"
+                                    paymentMethod = "آجل"
+                                    paidInCurrencyInput = "0.0"
+                                },
+                                label = { Text("بيع آجل (ذمم)") },
+                                modifier = Modifier.weight(1f)
+                            )
+                        }
+                    }
+
+                    // Customer reminder for credit
+                    if (paymentType == "CREDIT" && selectedCustomer == null) {
+                        item {
+                            Text(
+                                text = "⚠️ تنبيه: يجب تحديد عميل لإجراء البيع الآجل!",
+                                color = MaterialTheme.colorScheme.error,
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
+
+                    // 2. Payment Method (Cash, Electronic / Card, Bank Transfer)
+                    if (paymentType == "CASH") {
+                        item {
+                            Text(text = "طريقة الدفع:", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                            ) {
+                                FilterChip(
+                                    selected = paymentMethod == "كاش",
+                                    onClick = { paymentMethod = "كاش" },
+                                    leadingIcon = { Icon(Icons.Default.Payments, contentDescription = null, modifier = Modifier.size(16.dp)) },
+                                    label = { Text("كاش / نقداً", fontSize = 11.sp) },
+                                    modifier = Modifier.weight(1f)
+                                )
+                                FilterChip(
+                                    selected = paymentMethod == "إلكتروني / شبكة",
+                                    onClick = { paymentMethod = "إلكتروني / شبكة" },
+                                    leadingIcon = { Icon(Icons.Default.CreditCard, contentDescription = null, modifier = Modifier.size(16.dp)) },
+                                    label = { Text("شبكة / مدى", fontSize = 11.sp) },
+                                    modifier = Modifier.weight(1f)
+                                )
+                                FilterChip(
+                                    selected = paymentMethod == "تحويل بنكي",
+                                    onClick = { paymentMethod = "تحويل بنكي" },
+                                    leadingIcon = { Icon(Icons.Default.AccountBalance, contentDescription = null, modifier = Modifier.size(16.dp)) },
+                                    label = { Text("تحويل بنكي", fontSize = 11.sp) },
+                                    modifier = Modifier.weight(1f)
+                                )
+                            }
+                        }
+                    }
+
+                    // 3. Payment Currency Selection
+                    item {
+                        Text(text = "العملة المستلم بها المبلغ:", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                        Spacer(modifier = Modifier.height(4.dp))
+                        var currMenuExpanded by remember { mutableStateOf(false) }
+                        Box(modifier = Modifier.fillMaxWidth()) {
+                            OutlinedButton(
+                                onClick = { currMenuExpanded = true },
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(
+                                        text = "${chosenCurrency.name} (${chosenCurrency.symbol}) - كود: ${chosenCurrency.code}",
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                    Icon(Icons.Default.ArrowDropDown, contentDescription = null)
+                                }
+                            }
+                            DropdownMenu(
+                                expanded = currMenuExpanded,
+                                onDismissRequest = { currMenuExpanded = false }
+                            ) {
+                                currencyRates.forEach { rate ->
+                                    DropdownMenuItem(
+                                        text = {
+                                            Row(
+                                                modifier = Modifier.fillMaxWidth(),
+                                                horizontalArrangement = Arrangement.SpaceBetween
+                                            ) {
+                                                Text("${rate.name} (${rate.symbol})")
+                                                Spacer(modifier = Modifier.width(12.dp))
+                                                Text(
+                                                    if (rate.isBase) "أساسية" else "1 ${rate.code} = ${rate.rateToBase} ${baseCurrency?.symbol ?: ""}",
+                                                    fontSize = 11.sp,
+                                                    color = MaterialTheme.colorScheme.primary
+                                                )
+                                            }
+                                        },
+                                        onClick = {
+                                            selectedCurrencyId = rate.id
+                                            customExchangeRateInput = String.format(java.util.Locale.ENGLISH, "%.4f", rate.rateToBase)
+                                            currMenuExpanded = false
+                                        }
+                                    )
+                                }
+                            }
+                        }
+
+                        if (!chosenCurrency.isBase) {
+                            Spacer(modifier = Modifier.height(6.dp))
+                            OutlinedTextField(
+                                value = customExchangeRateInput,
+                                onValueChange = { customExchangeRateInput = it },
+                                label = { Text("سعر الصرف (1 ${chosenCurrency.code} = كم ${baseCurrency?.symbol ?: ""})") },
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                                singleLine = true,
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                        }
+                    }
+
+                    // 4. Amount Tendered / Paid in that Currency
+                    item {
+                        Card(
+                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f)),
+                            shape = RoundedCornerShape(8.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .padding(10.dp)
+                                    .fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(text = "المبلغ المطلوب بهذه العملة:", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                Text(
+                                    text = "${String.format(java.util.Locale.ENGLISH, "%,.2f", requiredInChosenCurrency)} ${chosenCurrency.symbol}",
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 15.sp,
+                                    color = MaterialTheme.colorScheme.primary
+                                )
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(6.dp))
+
                         OutlinedTextField(
-                            value = cashGivenInput,
-                            onValueChange = { cashGivenInput = it },
-                            label = { Text("المبلغ المستلم من العميل") },
-                            placeholder = { Text(Formatters.formatMoney(finalTotal, settings)) },
+                            value = paidInCurrencyInput,
+                            onValueChange = { paidInCurrencyInput = it },
+                            label = {
+                                Text(if (paymentType == "CREDIT") "المبلغ المدفوع مقدماً (${chosenCurrency.symbol})" else "المبلغ المستلم من الزبون (${chosenCurrency.symbol})")
+                            },
                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                             singleLine = true,
                             modifier = Modifier.fillMaxWidth()
                         )
+
                         Spacer(modifier = Modifier.height(6.dp))
-                        // Quick tender buttons
+
+                        // Quick Tender Buttons
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.spacedBy(4.dp)
                         ) {
                             SuggestionChip(
-                                onClick = { cashGivenInput = String.format(java.util.Locale.ENGLISH, "%.2f", finalTotal) },
-                                label = { Text("الضبط", fontSize = 10.sp) },
+                                onClick = {
+                                    paidInCurrencyInput = String.format(java.util.Locale.ENGLISH, "%.2f", requiredInChosenCurrency)
+                                },
+                                label = { Text("المبلغ التام", fontSize = 10.sp) },
                                 modifier = Modifier.height(28.dp)
                             )
                             SuggestionChip(
                                 onClick = {
-                                    val current = cashGivenInput.toDoubleOrNull() ?: 0.0
-                                    cashGivenInput = String.format(java.util.Locale.ENGLISH, "%.0f", current + 50)
+                                    val curr = paidInCurrencyInput.toDoubleOrNull() ?: 0.0
+                                    paidInCurrencyInput = String.format(java.util.Locale.ENGLISH, "%.0f", curr + 10)
+                                },
+                                label = { Text("+10", fontSize = 10.sp) },
+                                modifier = Modifier.height(28.dp)
+                            )
+                            SuggestionChip(
+                                onClick = {
+                                    val curr = paidInCurrencyInput.toDoubleOrNull() ?: 0.0
+                                    paidInCurrencyInput = String.format(java.util.Locale.ENGLISH, "%.0f", curr + 50)
                                 },
                                 label = { Text("+50", fontSize = 10.sp) },
                                 modifier = Modifier.height(28.dp)
                             )
                             SuggestionChip(
                                 onClick = {
-                                    val current = cashGivenInput.toDoubleOrNull() ?: 0.0
-                                    cashGivenInput = String.format(java.util.Locale.ENGLISH, "%.0f", current + 100)
+                                    val curr = paidInCurrencyInput.toDoubleOrNull() ?: 0.0
+                                    paidInCurrencyInput = String.format(java.util.Locale.ENGLISH, "%.0f", curr + 100)
                                 },
                                 label = { Text("+100", fontSize = 10.sp) },
                                 modifier = Modifier.height(28.dp)
                             )
-                            SuggestionChip(
-                                onClick = {
-                                    val current = cashGivenInput.toDoubleOrNull() ?: 0.0
-                                    cashGivenInput = String.format(java.util.Locale.ENGLISH, "%.0f", current + 500)
-                                },
-                                label = { Text("+500", fontSize = 10.sp) },
-                                modifier = Modifier.height(28.dp)
-                            )
                         }
+                    }
+
+                    // Change Due or Underpaid Badge
+                    if (paymentType == "CASH") {
+                        item {
+                            Card(
+                                colors = CardDefaults.cardColors(
+                                    containerColor = if (isUnderpaid) MaterialTheme.colorScheme.errorContainer else Color(0xFFDCFCE7)
+                                ),
+                                shape = RoundedCornerShape(8.dp),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Column(modifier = Modifier.padding(8.dp)) {
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Text(
+                                            text = if (isUnderpaid) "المستلم أقل من المطلوب!" else "الباقي للزبون:",
+                                            fontWeight = FontWeight.Bold,
+                                            fontSize = 12.sp,
+                                            color = if (isUnderpaid) MaterialTheme.colorScheme.error else Color(0xFF166534)
+                                        )
+                                        Text(
+                                            text = if (isUnderpaid) {
+                                                "${String.format(java.util.Locale.ENGLISH, "%,.2f", requiredInChosenCurrency - paidInChosenCurrency)} ${chosenCurrency.symbol}"
+                                            } else {
+                                                "${String.format(java.util.Locale.ENGLISH, "%,.2f", changeDueInChosen)} ${chosenCurrency.symbol}"
+                                            },
+                                            fontWeight = FontWeight.Bold,
+                                            fontSize = 14.sp,
+                                            color = if (isUnderpaid) MaterialTheme.colorScheme.error else Color(0xFF166534)
+                                        )
+                                    }
+                                    if (!chosenCurrency.isBase && !isUnderpaid && changeDueInChosen > 0) {
+                                        Text(
+                                            text = "يعادل بالعملة الأساسية: ${Formatters.formatMoney(changeDueInBase, settings)}",
+                                            fontSize = 11.sp,
+                                            color = Color(0xFF166534).copy(alpha = 0.8f)
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    // Additional Discount & Notes
+                    item {
+                        OutlinedTextField(
+                            value = discountInput,
+                            onValueChange = { discountInput = it },
+                            label = { Text("الخصم الإضافي (${settings?.currencySymbol ?: "ر.س"})") },
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+
                         Spacer(modifier = Modifier.height(8.dp))
 
-                        // Change Due Badge
+                        OutlinedTextField(
+                            value = notesInput,
+                            onValueChange = { notesInput = it },
+                            label = { Text("ملاحظات الفاتورة (اختياري)") },
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
+
+                    // Financial Breakdown Summary Card
+                    item {
                         Card(
-                            colors = CardDefaults.cardColors(
-                                containerColor = if (isUnderpaid) MaterialTheme.colorScheme.errorContainer else Color(0xFFDCFCE7)
-                            ),
+                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
                             shape = RoundedCornerShape(8.dp),
                             modifier = Modifier.fillMaxWidth()
                         ) {
-                            Row(
-                                modifier = Modifier
-                                    .padding(8.dp)
-                                    .fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Text(
-                                    text = if (isUnderpaid) "المستلم أقل من المطلوب!" else "الباقي للعميل:",
-                                    fontWeight = FontWeight.Bold,
-                                    fontSize = 12.sp,
-                                    color = if (isUnderpaid) MaterialTheme.colorScheme.error else Color(0xFF166534)
-                                )
-                                Text(
-                                    text = if (isUnderpaid) Formatters.formatMoney(finalTotal - cashGiven, settings)
-                                    else Formatters.formatMoney(changeDue, settings),
-                                    fontWeight = FontWeight.Bold,
-                                    fontSize = 14.sp,
-                                    color = if (isUnderpaid) MaterialTheme.colorScheme.error else Color(0xFF166534)
-                                )
-                            }
-                        }
-                        Spacer(modifier = Modifier.height(8.dp))
-                    }
-
-                    OutlinedTextField(
-                        value = notesInput,
-                        onValueChange = { notesInput = it },
-                        label = { Text("ملاحظات (اختياري)") },
-                        singleLine = true,
-                        modifier = Modifier.fillMaxWidth()
-                    )
-
-                    Spacer(modifier = Modifier.height(10.dp))
-
-                    Card(
-                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
-                        shape = RoundedCornerShape(8.dp),
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Column(modifier = Modifier.padding(10.dp)) {
-                            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                                Text(text = "المجموع الفرعي:", fontSize = 12.sp)
-                                Text(text = Formatters.formatMoney(subtotal, settings), fontSize = 12.sp)
-                            }
-                            if (calculatedTax > 0) {
+                            Column(modifier = Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                                    Text(text = "الضريبة (${settings?.taxRate}%):", fontSize = 12.sp)
-                                    Text(text = Formatters.formatMoney(calculatedTax, settings), fontSize = 12.sp)
+                                    Text(text = "المجموع الفرعي:", fontSize = 12.sp)
+                                    Text(text = Formatters.formatMoney(subtotal, settings), fontSize = 12.sp)
                                 }
-                            }
-                            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                                Text(text = "الإجمالي النهائي:", fontWeight = FontWeight.Bold)
-                                Text(text = Formatters.formatMoney(finalTotal, settings), fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
-                            }
-                            if (paymentType == "CREDIT") {
+                                if (calculatedTax > 0) {
+                                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                                        Text(text = "الضريبة (${settings?.taxRate}%):", fontSize = 12.sp)
+                                        Text(text = Formatters.formatMoney(calculatedTax, settings), fontSize = 12.sp)
+                                    }
+                                }
                                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                                    Text(text = "المتبقي الآجل:", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.error)
-                                    Text(text = Formatters.formatMoney(remaining, settings), fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.error)
+                                    Text(text = "الإجمالي بالعملة الأساسية:", fontWeight = FontWeight.Bold)
+                                    Text(text = Formatters.formatMoney(finalTotal, settings), fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+                                }
+                                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                                    Text(text = "طريقة الدفع والعملة:", fontSize = 12.sp)
+                                    Text(text = "$paymentMethod (${chosenCurrency.name})", fontSize = 12.sp, fontWeight = FontWeight.Medium)
+                                }
+                                if (paymentType == "CREDIT") {
+                                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                                        Text(text = "المتبقي الآجل للعميل:", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.error)
+                                        Text(text = Formatters.formatMoney(remainingInBase, settings), fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.error)
+                                    }
                                 }
                             }
                         }
@@ -566,16 +748,21 @@ fun PosScreen(
                         viewModel.setPosTax(calculatedTax)
                         viewModel.completeSale(
                             paymentType = paymentType,
-                            paidAmount = finalPaid,
+                            paymentMethod = paymentMethod,
+                            paidCurrency = chosenCurrency.name,
+                            paidCurrencyAmount = paidInChosenCurrency,
+                            exchangeRate = effectiveRate,
+                            paidAmount = finalPaidInBase,
                             notes = notesInput.trim(),
                             onSuccess = { invoiceId ->
                                 showCheckoutDialog = false
                                 onNavigateToInvoice(invoiceId)
                             }
                         )
-                    }
+                    },
+                    enabled = !(paymentType == "CREDIT" && selectedCustomer == null)
                 ) {
-                    Text("تأكيد وحفظ")
+                    Text("تأكيد وحفظ الفاتورة")
                 }
             },
             dismissButton = {

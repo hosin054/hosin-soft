@@ -187,13 +187,13 @@ fun DashboardScreen(
                 ) {
                     QuickActionItem(
                         icon = Icons.Default.PointOfSale,
-                        label = "نقطة بيع POS",
+                        label = "بيع للزبون",
                         color = MaterialTheme.colorScheme.primary,
                         onClick = { onNavigateTo(Screen.Pos.route) }
                     )
                     QuickActionItem(
                         icon = Icons.Default.ShoppingCart,
-                        label = "فاتورة شراء",
+                        label = "شراء للمحل",
                         color = MaterialTheme.colorScheme.secondary,
                         onClick = { onNavigateTo(Screen.PurchaseForm.route) }
                     )
@@ -238,6 +238,18 @@ fun DashboardScreen(
                         label = "التقارير المالية",
                         color = Color(0xFF4F46E5),
                         onClick = { onNavigateTo(Screen.Reports.route) }
+                    )
+                }
+                Spacer(modifier = Modifier.height(10.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.Start
+                ) {
+                    QuickActionItem(
+                        icon = Icons.Default.CurrencyExchange,
+                        label = "أسعار العملات",
+                        color = Color(0xFF0D9488),
+                        onClick = { onNavigateTo(Screen.Currencies.route) }
                     )
                 }
             }

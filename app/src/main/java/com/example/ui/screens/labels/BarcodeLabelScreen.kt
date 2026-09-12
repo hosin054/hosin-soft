@@ -27,6 +27,7 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.data.model.Product
 import com.example.ui.MainViewModel
+import com.example.ui.components.BarcodeScannerDialog
 import com.example.ui.util.Formatters
 import com.example.ui.util.InvoicePrinter
 
@@ -46,6 +47,7 @@ fun BarcodeLabelScreen(
     }
 
     var showProductPicker by remember { mutableStateOf(false) }
+    var showScanner by remember { mutableStateOf(false) }
 
     // Customization states
     var customName by remember(selectedProduct) { mutableStateOf(selectedProduct?.name ?: "") }
@@ -209,6 +211,11 @@ fun BarcodeLabelScreen(
                     value = customBarcode,
                     onValueChange = { customBarcode = it },
                     label = { Text("رقم الباركود / الكود") },
+                    trailingIcon = {
+                        IconButton(onClick = { showScanner = true }) {
+                            Icon(Icons.Default.QrCodeScanner, contentDescription = "مسح باركود", tint = MaterialTheme.colorScheme.primary)
+                        }
+                    },
                     singleLine = true,
                     modifier = Modifier.weight(1f)
                 )
@@ -343,6 +350,21 @@ fun BarcodeLabelScreen(
             confirmButton = {
                 TextButton(onClick = { showProductPicker = false }) {
                     Text("إغلاق")
+                }
+            }
+        )
+    }
+
+    if (showScanner) {
+        BarcodeScannerDialog(
+            onDismiss = { showScanner = false },
+            onBarcodeScanned = { code ->
+                customBarcode = code
+                val matched = products.find { it.barcode.equals(code, ignoreCase = true) || it.sku.equals(code, ignoreCase = true) }
+                if (matched != null) {
+                    selectedProduct = matched
+                    customName = matched.name
+                    customPrice = String.format(java.util.Locale.ENGLISH, "%.2f", matched.cashSalePrice)
                 }
             }
         )

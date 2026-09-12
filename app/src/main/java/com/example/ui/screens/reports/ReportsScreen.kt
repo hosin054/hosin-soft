@@ -16,10 +16,12 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.example.data.model.CurrencyRate
 import com.example.ui.MainViewModel
 import com.example.ui.util.BackupHelper
 import com.example.ui.util.Formatters
 import java.util.Calendar
+import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -33,12 +35,26 @@ fun ReportsScreen(
     val products by viewModel.allProducts.collectAsStateWithLifecycle()
     val customers by viewModel.allCustomers.collectAsStateWithLifecycle()
     val suppliers by viewModel.allSuppliers.collectAsStateWithLifecycle()
+    val currencyRates by viewModel.allCurrencyRates.collectAsStateWithLifecycle()
 
     var dateFilter by remember { mutableStateOf(1) } // 0 = Today, 1 = This Month, 2 = This Year, 3 = All
+    var showAllCurrenciesOverview by remember { mutableStateOf(false) }
+
+    val baseCurrency = remember(currencyRates) {
+        currencyRates.find { it.isBase } ?: currencyRates.firstOrNull() ?: CurrencyRate(
+            code = "SAR", name = "ريال سعودي", symbol = settings?.currencySymbol ?: "ر.س", rateToBase = 1.0, isBase = true
+        )
+    }
+
+    var selectedCurrencyId by remember(currencyRates) {
+        mutableStateOf(baseCurrency.id)
+    }
+
+    val selectedCurrency = remember(currencyRates, selectedCurrencyId) {
+        currencyRates.find { it.id == selectedCurrencyId } ?: baseCurrency
+    }
 
     val cal = Calendar.getInstance()
-    val now = cal.timeInMillis
-
     val fromTimestamp = remember(dateFilter) {
         when (dateFilter) {
             0 -> {
@@ -56,6 +72,7 @@ fun ReportsScreen(
             2 -> {
                 cal.set(Calendar.DAY_OF_YEAR, 1)
                 cal.set(Calendar.HOUR_OF_DAY, 0)
+                cal.set(Calendar.MINUTE, 0)
                 cal.timeInMillis
             }
             else -> 0L
@@ -66,20 +83,31 @@ fun ReportsScreen(
     val periodPurchases = invoices.filter { it.invoiceType == "PURCHASE" && it.status == "COMPLETED" && it.createdAt >= fromTimestamp }
     val periodExpenses = expenses.filter { it.createdAt >= fromTimestamp }
 
-    val totalSales = periodSales.sumOf { it.totalAmount }
-    val totalProfitGross = periodSales.sumOf { it.profit }
-    val totalExpenses = periodExpenses.sumOf { it.amount }
-    val netProfit = totalProfitGross - totalExpenses
-    val totalPurchases = periodPurchases.sumOf { it.totalAmount }
-    val totalTax = periodSales.sumOf { it.taxAmount }
+    val totalSalesBase = periodSales.sumOf { it.totalAmount }
+    val totalProfitGrossBase = periodSales.sumOf { it.profit }
+    val totalExpensesBase = periodExpenses.sumOf { it.amount }
+    val netProfitBase = totalProfitGrossBase - totalExpensesBase
+    val totalPurchasesBase = periodPurchases.sumOf { it.totalAmount }
+    val totalTaxBase = periodSales.sumOf { it.taxAmount }
 
-    val totalCustomersDebt = customers.sumOf { maxOf(0.0, it.currentBalance) }
-    val totalSuppliersPayable = suppliers.sumOf { maxOf(0.0, it.currentBalance) }
+    val totalCustomersDebtBase = customers.sumOf { maxOf(0.0, it.currentBalance) }
+    val totalSuppliersPayableBase = suppliers.sumOf { maxOf(0.0, it.currentBalance) }
+
+    // Breakdown by payment method
+    val cashSalesBase = periodSales.filter { it.paymentMethod == "كاش" || (it.paymentMethod.isBlank() && it.paymentType == "CASH") }.sumOf { it.paidAmount }
+    val electronicSalesBase = periodSales.filter { it.paymentMethod == "إلكتروني / شبكة" }.sumOf { it.paidAmount }
+    val bankTransferSalesBase = periodSales.filter { it.paymentMethod == "تحويل بنكي" }.sumOf { it.paidAmount }
+    val creditSalesBase = periodSales.sumOf { it.remainingAmount }
+
+    fun toDisplayMoney(amountInBase: Double, curr: CurrencyRate = selectedCurrency): String {
+        val converted = if (curr.rateToBase > 0) amountInBase / curr.rateToBase else amountInBase
+        return "${String.format(Locale.ENGLISH, "%,.2f", converted)} ${curr.symbol}"
+    }
 
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("التقارير المالية والأرباح والخسائر") },
+                title = { Text("التقارير المالية والأرباح") },
                 actions = {
                     IconButton(onClick = {
                         val periodLabel = when (dateFilter) {
@@ -89,22 +117,27 @@ fun ReportsScreen(
                             else -> "كافة الفترات"
                         }
                         val text = """
-                            تقرير مالي - ${settings?.storeName}
+                            تقرير الأرباح والمالية - ${settings?.storeName}
                             الفترة: $periodLabel
+                            عملة التقرير: ${selectedCurrency.name} (${selectedCurrency.symbol})
                             ------------------------
-                            إجمالي المبيعات: ${Formatters.formatMoney(totalSales, settings)}
-                            مجمل ربح المبيعات: ${Formatters.formatMoney(totalProfitGross, settings)}
-                            إجمالي المصروفات: ${Formatters.formatMoney(totalExpenses, settings)}
-                            صافي الربح النهائي: ${Formatters.formatMoney(netProfit, settings)}
+                            إجمالي المبيعات: ${toDisplayMoney(totalSalesBase)}
+                            مجمل ربح المبيعات: ${toDisplayMoney(totalProfitGrossBase)}
+                            إجمالي المصروفات: ${toDisplayMoney(totalExpensesBase)}
+                            صافي الربح النهائي: ${toDisplayMoney(netProfitBase)}
                             ------------------------
-                            إجمالي المشتريات: ${Formatters.formatMoney(totalPurchases, settings)}
-                            ضريبة القيمة المضافة: ${Formatters.formatMoney(totalTax, settings)}
-                            ديون العملاء (لنا): ${Formatters.formatMoney(totalCustomersDebt, settings)}
-                            مستحقات الموردين (علينا): ${Formatters.formatMoney(totalSuppliersPayable, settings)}
+                            المقبوض نقداً (كاش): ${toDisplayMoney(cashSalesBase)}
+                            المقبوض شبكة/إلكتروني: ${toDisplayMoney(electronicSalesBase)}
+                            المقبوض تحويل بنكي: ${toDisplayMoney(bankTransferSalesBase)}
+                            المبيعات الآجلة (ديون): ${toDisplayMoney(creditSalesBase)}
                             ------------------------
-                            تم الاستخراج بواسطة نظام حسين سوفت
+                            إجمالي المشتريات والتوريد: ${toDisplayMoney(totalPurchasesBase)}
+                            ديون العملاء (لنا): ${toDisplayMoney(totalCustomersDebtBase)}
+                            مستحقات الموردين (علينا): ${toDisplayMoney(totalSuppliersPayableBase)}
+                            ------------------------
+                            تم الاستخراج بنجاح بواسطة نظام المبيعات
                         """.trimIndent()
-                        BackupHelper.shareText(context, text, "تقرير مالي $periodLabel")
+                        BackupHelper.shareText(context, text, "تقرير مالي $periodLabel - ${selectedCurrency.name}")
                     }) {
                         Icon(Icons.Default.Share, contentDescription = "مشاركة التقرير", tint = MaterialTheme.colorScheme.onPrimary)
                     }
@@ -123,7 +156,7 @@ fun ReportsScreen(
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
-            // Period Filter Tabs
+            // Period Filter Chips
             item {
                 Row(modifier = Modifier.fillMaxWidth()) {
                     FilterChip(
@@ -156,12 +189,174 @@ fun ReportsScreen(
                 }
             }
 
+            // Currency Selection for Financial Report
+            item {
+                Card(
+                    shape = RoundedCornerShape(12.dp),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.5f)),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(modifier = Modifier.padding(12.dp)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(Icons.Default.CurrencyExchange, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(
+                                    text = "عملة حساب وعرض الأرباح:",
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 13.sp
+                                )
+                            }
+                            TextButton(onClick = { showAllCurrenciesOverview = !showAllCurrenciesOverview }) {
+                                Text(if (showAllCurrenciesOverview) "إخفاء جدول العملات" else "عرض بجميع العملات", fontSize = 11.sp)
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(6.dp))
+
+                        var currencyDropdownExpanded by remember { mutableStateOf(false) }
+                        Box(modifier = Modifier.fillMaxWidth()) {
+                            OutlinedButton(
+                                onClick = { currencyDropdownExpanded = true },
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(8.dp)
+                            ) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(
+                                        text = "${selectedCurrency.name} (${selectedCurrency.symbol}) - ${selectedCurrency.code}",
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        if (!selectedCurrency.isBase) {
+                                            Text(
+                                                text = "سعر الصرف: ${selectedCurrency.rateToBase} ${baseCurrency.symbol}",
+                                                fontSize = 11.sp,
+                                                color = MaterialTheme.colorScheme.primary
+                                            )
+                                            Spacer(modifier = Modifier.width(4.dp))
+                                        }
+                                        Icon(Icons.Default.ArrowDropDown, contentDescription = null)
+                                    }
+                                }
+                            }
+                            DropdownMenu(
+                                expanded = currencyDropdownExpanded,
+                                onDismissRequest = { currencyDropdownExpanded = false }
+                            ) {
+                                currencyRates.forEach { rate ->
+                                    DropdownMenuItem(
+                                        text = {
+                                            Row(
+                                                modifier = Modifier.fillMaxWidth(),
+                                                horizontalArrangement = Arrangement.SpaceBetween
+                                            ) {
+                                                Text("${rate.name} (${rate.symbol})")
+                                                Spacer(modifier = Modifier.width(16.dp))
+                                                Text(
+                                                    if (rate.isBase) "الأساسية" else "سعر الصرف: ${rate.rateToBase}",
+                                                    fontSize = 11.sp,
+                                                    color = MaterialTheme.colorScheme.primary
+                                                )
+                                            }
+                                        },
+                                        onClick = {
+                                            selectedCurrencyId = rate.id
+                                            currencyDropdownExpanded = false
+                                        }
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // All Currencies Overview Table (when toggled or selected)
+            if (showAllCurrenciesOverview) {
+                item {
+                    Card(
+                        shape = RoundedCornerShape(12.dp),
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                        elevation = CardDefaults.cardElevation(2.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Column(modifier = Modifier.padding(14.dp)) {
+                            Text(
+                                text = "مقارنة الأرباح والمبيعات بجميع العملات المعرفة",
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 14.sp,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                            Spacer(modifier = Modifier.height(8.dp))
+
+                            // Header row
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(6.dp))
+                                    .padding(8.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Text("العملة", fontWeight = FontWeight.Bold, fontSize = 11.sp, modifier = Modifier.weight(1.2f))
+                                Text("سعر الصرف", fontWeight = FontWeight.Bold, fontSize = 11.sp, modifier = Modifier.weight(1f))
+                                Text("المبيعات", fontWeight = FontWeight.Bold, fontSize = 11.sp, modifier = Modifier.weight(1.3f))
+                                Text("صافي الربح", fontWeight = FontWeight.Bold, fontSize = 11.sp, modifier = Modifier.weight(1.3f))
+                            }
+
+                            currencyRates.forEach { curr ->
+                                Spacer(modifier = Modifier.height(6.dp))
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(horizontal = 4.dp, vertical = 3.dp),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(
+                                        text = "${curr.name} (${curr.symbol})",
+                                        fontSize = 11.sp,
+                                        fontWeight = if (curr.id == selectedCurrency.id) FontWeight.Bold else FontWeight.Normal,
+                                        modifier = Modifier.weight(1.2f)
+                                    )
+                                    Text(
+                                        text = if (curr.isBase) "1.0 (أساسي)" else String.format(Locale.ENGLISH, "%.4f", curr.rateToBase),
+                                        fontSize = 11.sp,
+                                        modifier = Modifier.weight(1f)
+                                    )
+                                    Text(
+                                        text = toDisplayMoney(totalSalesBase, curr),
+                                        fontSize = 11.sp,
+                                        modifier = Modifier.weight(1.3f)
+                                    )
+                                    Text(
+                                        text = toDisplayMoney(netProfitBase, curr),
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = if (netProfitBase >= 0) Color(0xFF15803D) else MaterialTheme.colorScheme.error,
+                                        modifier = Modifier.weight(1.3f)
+                                    )
+                                }
+                                HorizontalDivider(modifier = Modifier.padding(vertical = 2.dp), color = MaterialTheme.colorScheme.surfaceVariant)
+                            }
+                        }
+                    }
+                }
+            }
+
             // Net Profit Highlight Card
             item {
                 Card(
                     shape = RoundedCornerShape(14.dp),
                     colors = CardDefaults.cardColors(
-                        containerColor = if (netProfit >= 0) Color(0xFF15803D).copy(alpha = 0.12f)
+                        containerColor = if (netProfitBase >= 0) Color(0xFF15803D).copy(alpha = 0.12f)
                         else MaterialTheme.colorScheme.error.copy(alpha = 0.12f)
                     ),
                     modifier = Modifier.fillMaxWidth()
@@ -170,19 +365,85 @@ fun ReportsScreen(
                         modifier = Modifier.padding(18.dp),
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
-                        Text(text = "صافي الربح / الخسارة للفترة", fontSize = 13.sp)
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(text = "صافي الربح / الخسارة للفترة", fontSize = 13.sp)
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Surface(
+                                shape = RoundedCornerShape(4.dp),
+                                color = MaterialTheme.colorScheme.primary.copy(alpha = 0.2f)
+                            ) {
+                                Text(
+                                    text = "بعملة: ${selectedCurrency.name}",
+                                    fontSize = 10.sp,
+                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                        }
                         Spacer(modifier = Modifier.height(6.dp))
                         Text(
-                            text = Formatters.formatMoney(netProfit, settings),
+                            text = toDisplayMoney(netProfitBase),
                             fontWeight = FontWeight.Bold,
                             fontSize = 26.sp,
-                            color = if (netProfit >= 0) Color(0xFF15803D) else MaterialTheme.colorScheme.error
+                            color = if (netProfitBase >= 0) Color(0xFF15803D) else MaterialTheme.colorScheme.error
                         )
                         Spacer(modifier = Modifier.height(4.dp))
                         Text(
-                            text = "(مجمل ربح المبيعات: ${Formatters.formatMoney(totalProfitGross, settings)} - المصروفات: ${Formatters.formatMoney(totalExpenses, settings)})",
+                            text = "(مجمل ربح المبيعات: ${toDisplayMoney(totalProfitGrossBase)} - المصروفات: ${toDisplayMoney(totalExpensesBase)})",
                             fontSize = 11.sp,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        if (!selectedCurrency.isBase) {
+                            Spacer(modifier = Modifier.height(3.dp))
+                            Text(
+                                text = "ما يعادل بالعملة الأساسية للمتجر: ${Formatters.formatMoney(netProfitBase, settings)}",
+                                fontSize = 10.sp,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                        }
+                    }
+                }
+            }
+
+            // Payment Methods Breakdown Card (الكاش والإلكتروني والآجل)
+            item {
+                Card(
+                    shape = RoundedCornerShape(12.dp),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                    elevation = CardDefaults.cardElevation(2.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.Payments, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(text = "تفصيل المقبوضات حسب طريقة الدفع", fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                        }
+                        Spacer(modifier = Modifier.height(10.dp))
+
+                        ReportRow(
+                            title = "💵 المدفوع نقداً (كاش)",
+                            value = toDisplayMoney(cashSalesBase),
+                            color = Color(0xFF166534),
+                            isBold = true
+                        )
+                        ReportRow(
+                            title = "💳 المدفوع إلكتروني / شبكة / مدى",
+                            value = toDisplayMoney(electronicSalesBase),
+                            color = Color(0xFF0284C7),
+                            isBold = true
+                        )
+                        ReportRow(
+                            title = "🏦 المدفوع تحويل بنكي",
+                            value = toDisplayMoney(bankTransferSalesBase),
+                            color = Color(0xFF7C3AED),
+                            isBold = true
+                        )
+                        ReportRow(
+                            title = "⏳ مبيعات آجلة غير محصلة (ذمم)",
+                            value = toDisplayMoney(creditSalesBase),
+                            color = MaterialTheme.colorScheme.error,
+                            isBold = true
                         )
                     }
                 }
@@ -197,23 +458,35 @@ fun ReportsScreen(
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Column(modifier = Modifier.padding(16.dp)) {
-                        Text(text = "تفاصيل القوائم المالية", fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(text = "تفاصيل القوائم المالية", fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                            Text(
+                                text = "القيم بـ ${selectedCurrency.symbol}",
+                                fontSize = 11.sp,
+                                color = MaterialTheme.colorScheme.primary,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                        }
                         Spacer(modifier = Modifier.height(12.dp))
 
-                        ReportRow(title = "إجمالي المبيعات", value = Formatters.formatMoney(totalSales, settings), isBold = true)
+                        ReportRow(title = "إجمالي المبيعات", value = toDisplayMoney(totalSalesBase), isBold = true)
                         ReportRow(title = "عدد فواتير المبيعات", value = "${periodSales.size} فاتورة")
-                        ReportRow(title = "مجمل ربح المبيعات", value = Formatters.formatMoney(totalProfitGross, settings), color = Color(0xFF15803D))
+                        ReportRow(title = "مجمل ربح المبيعات", value = toDisplayMoney(totalProfitGrossBase), color = Color(0xFF15803D))
                         HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
 
-                        ReportRow(title = "إجمالي المصروفات التشغيلية", value = Formatters.formatMoney(totalExpenses, settings), color = MaterialTheme.colorScheme.error)
+                        ReportRow(title = "إجمالي المصروفات التشغيلية", value = toDisplayMoney(totalExpensesBase), color = MaterialTheme.colorScheme.error)
                         ReportRow(title = "عدد بنود المصروفات", value = "${periodExpenses.size} حركة")
                         HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
 
-                        ReportRow(title = "صافي الربح النهائي", value = Formatters.formatMoney(netProfit, settings), isBold = true, color = if (netProfit >= 0) Color(0xFF15803D) else MaterialTheme.colorScheme.error)
+                        ReportRow(title = "صافي الربح النهائي", value = toDisplayMoney(netProfitBase), isBold = true, color = if (netProfitBase >= 0) Color(0xFF15803D) else MaterialTheme.colorScheme.error)
                         HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
 
-                        ReportRow(title = "إجمالي المشتريات والتوريدات", value = Formatters.formatMoney(totalPurchases, settings))
-                        ReportRow(title = "ضريبة القيمة المضافة المحصلة", value = Formatters.formatMoney(totalTax, settings))
+                        ReportRow(title = "إجمالي المشتريات والتوريدات", value = toDisplayMoney(totalPurchasesBase))
+                        ReportRow(title = "ضريبة القيمة المضافة المحصلة", value = toDisplayMoney(totalTaxBase))
                     }
                 }
             }
@@ -230,8 +503,8 @@ fun ReportsScreen(
                         Text(text = "موقف الذمم والديون اللحظي", fontWeight = FontWeight.Bold, fontSize = 15.sp)
                         Spacer(modifier = Modifier.height(12.dp))
 
-                        ReportRow(title = "ديون العملاء المطلوبة (لنا)", value = Formatters.formatMoney(totalCustomersDebt, settings), color = Color(0xFFC2410C), isBold = true)
-                        ReportRow(title = "مستحقات الموردين الواجب سدادها (علينا)", value = Formatters.formatMoney(totalSuppliersPayable, settings), color = MaterialTheme.colorScheme.error, isBold = true)
+                        ReportRow(title = "ديون العملاء المطلوبة (لنا)", value = toDisplayMoney(totalCustomersDebtBase), color = Color(0xFFC2410C), isBold = true)
+                        ReportRow(title = "مستحقات الموردين الواجب سدادها (علينا)", value = toDisplayMoney(totalSuppliersPayableBase), color = MaterialTheme.colorScheme.error, isBold = true)
                     }
                 }
             }

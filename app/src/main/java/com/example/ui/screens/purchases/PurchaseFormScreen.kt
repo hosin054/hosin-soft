@@ -22,6 +22,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.data.model.Product
 import com.example.data.model.Supplier
 import com.example.ui.MainViewModel
+import com.example.ui.components.BarcodeScannerDialog
 import com.example.ui.util.Formatters
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -43,6 +44,7 @@ fun PurchaseFormScreen(
 
     var showSupplierPicker by remember { mutableStateOf(false) }
     var showProductPicker by remember { mutableStateOf(false) }
+    var showBarcodeScanner by remember { mutableStateOf(false) }
 
     val totalAmount = purchaseItems.sumOf { it.total }
     var paidAmountInput by remember(totalAmount, paymentType) {
@@ -204,15 +206,26 @@ fun PurchaseFormScreen(
 
             Spacer(modifier = Modifier.height(12.dp))
 
-            // Add Product Button
-            Button(
-                onClick = { showProductPicker = true },
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(8.dp)
-            ) {
-                Icon(Icons.Default.Add, contentDescription = null)
-                Spacer(modifier = Modifier.width(6.dp))
-                Text("إضافة صنف إلى الفاتورة")
+            // Add Product Buttons
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Button(
+                    onClick = { showProductPicker = true },
+                    modifier = Modifier.weight(1f),
+                    shape = RoundedCornerShape(8.dp)
+                ) {
+                    Icon(Icons.Default.Add, contentDescription = null)
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text("إضافة صنف (قائمة)")
+                }
+                FilledTonalButton(
+                    onClick = { showBarcodeScanner = true },
+                    modifier = Modifier.weight(1f),
+                    shape = RoundedCornerShape(8.dp)
+                ) {
+                    Icon(Icons.Default.QrCodeScanner, contentDescription = null)
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text("مسح باركود (كاميرا)")
+                }
             }
 
             Spacer(modifier = Modifier.height(12.dp))
@@ -426,6 +439,21 @@ fun PurchaseFormScreen(
             },
             dismissButton = {
                 TextButton(onClick = { showProductPicker = false }) { Text("إلغاء") }
+            }
+        )
+    }
+
+    if (showBarcodeScanner) {
+        BarcodeScannerDialog(
+            onDismiss = { showBarcodeScanner = false },
+            onBarcodeScanned = { barcode ->
+                val matched = products.find { it.barcode.equals(barcode, ignoreCase = true) || it.sku.equals(barcode, ignoreCase = true) }
+                if (matched != null) {
+                    viewModel.addToPurchase(matched, isMainUnit = true, quantity = 1.0, costPrice = matched.purchasePrice)
+                    viewModel.showMessage("تمت إضافة الصنف: ${matched.name}")
+                } else {
+                    viewModel.showMessage("لم يتم العثور على منتج بالباركود: $barcode")
+                }
             }
         )
     }

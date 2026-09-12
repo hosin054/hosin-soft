@@ -25,6 +25,7 @@ sealed class Screen(val route: String, val title: String) {
     object Reports : Screen("reports", "التقارير المالية")
     object ImportExport : Screen("import_export", "استيراد وتصدير إكسل")
     object Settings : Screen("settings", "الإعدادات")
+    object Currencies : Screen("currencies", "أسعار صرف العملات والمحوّل")
     object InvoiceDetail : Screen("invoice_detail/{invoiceId}", "تفاصيل الفاتورة") {
         fun createRoute(invoiceId: Long) = "invoice_detail/$invoiceId"
     }
