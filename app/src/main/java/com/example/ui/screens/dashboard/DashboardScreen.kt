@@ -210,6 +210,36 @@ fun DashboardScreen(
                         onClick = { onNavigateTo(Screen.Vouchers.route) }
                     )
                 }
+                Spacer(modifier = Modifier.height(10.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    QuickActionItem(
+                        icon = Icons.Default.RequestQuote,
+                        label = "عروض الأسعار",
+                        color = Color(0xFF0284C7),
+                        onClick = { onNavigateTo(Screen.Quotations.route) }
+                    )
+                    QuickActionItem(
+                        icon = Icons.Default.QrCode,
+                        label = "ملصقات الأسعار",
+                        color = Color(0xFF7C3AED),
+                        onClick = { onNavigateTo(Screen.BarcodeLabels.createRoute(0L)) }
+                    )
+                    QuickActionItem(
+                        icon = Icons.Default.Inventory,
+                        label = "المخزون والجرد",
+                        color = Color(0xFFD97706),
+                        onClick = { onNavigateTo(Screen.Inventory.route) }
+                    )
+                    QuickActionItem(
+                        icon = Icons.Default.Assessment,
+                        label = "التقارير المالية",
+                        color = Color(0xFF4F46E5),
+                        onClick = { onNavigateTo(Screen.Reports.route) }
+                    )
+                }
             }
 
             // Main KPI Cards

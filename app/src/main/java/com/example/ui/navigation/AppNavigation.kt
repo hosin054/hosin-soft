@@ -29,6 +29,8 @@ import com.example.ui.screens.products.ProductFormScreen
 import com.example.ui.screens.products.ProductsScreen
 import com.example.ui.screens.purchases.PurchaseFormScreen
 import com.example.ui.screens.purchases.PurchasesScreen
+import com.example.ui.screens.quotations.QuotationsScreen
+import com.example.ui.screens.labels.BarcodeLabelScreen
 import com.example.ui.screens.reports.ReportsScreen
 import com.example.ui.screens.settings.AuditLogsScreen
 import com.example.ui.screens.settings.SettingsScreen
@@ -164,6 +166,9 @@ fun AppNavigation(viewModel: MainViewModel) {
                     },
                     onNavigateToInventory = {
                         navController.navigate(Screen.Inventory.route)
+                    },
+                    onNavigateToBarcodeLabels = { productId ->
+                        navController.navigate(Screen.BarcodeLabels.createRoute(productId))
                     }
                 )
             }
@@ -283,6 +288,29 @@ fun AppNavigation(viewModel: MainViewModel) {
                 AuditLogsScreen(
                     viewModel = viewModel,
                     onBack = { navController.popBackStack() }
+                )
+            }
+
+            composable(Screen.Quotations.route) {
+                QuotationsScreen(
+                    viewModel = viewModel,
+                    onNavigateBack = { navController.popBackStack() },
+                    onNavigateToPos = { navController.navigate(Screen.Pos.route) }
+                )
+            }
+
+            composable(
+                route = Screen.BarcodeLabels.route,
+                arguments = listOf(navArgument("productId") {
+                    type = NavType.LongType
+                    defaultValue = 0L
+                })
+            ) { backStack ->
+                val productId = backStack.arguments?.getLong("productId") ?: 0L
+                BarcodeLabelScreen(
+                    viewModel = viewModel,
+                    initialProductId = productId,
+                    onNavigateBack = { navController.popBackStack() }
                 )
             }
 

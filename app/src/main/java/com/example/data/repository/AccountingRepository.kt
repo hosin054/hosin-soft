@@ -366,6 +366,152 @@ class AccountingRepository(private val dao: AppDao) {
         return invoiceId
     }
 
+    suspend fun saveQuotation(
+        customer: Customer?,
+        cartItems: List<CartItem>,
+        discountAmount: Double,
+        taxAmount: Double,
+        notes: String,
+        currentUser: String
+    ): Long {
+        val dateFormat = SimpleDateFormat("yyyyMMdd-HHmmss", Locale.ENGLISH)
+        val quoteNumber = "QTE-" + dateFormat.format(Date())
+        val subtotal = cartItems.sumOf { it.total }
+        val totalAmount = maxOf(0.0, subtotal - discountAmount + taxAmount)
+        val totalCost = cartItems.sumOf { it.totalCost }
+        val profit = (totalAmount - taxAmount) - totalCost
+
+        val quotation = Invoice(
+            invoiceNumber = quoteNumber,
+            invoiceType = "QUOTATION",
+            paymentType = "CASH",
+            partyId = customer?.id,
+            partyName = customer?.name ?: "عميل عام",
+            subtotal = subtotal,
+            discountAmount = discountAmount,
+            taxAmount = taxAmount,
+            totalAmount = totalAmount,
+            paidAmount = 0.0,
+            remainingAmount = totalAmount,
+            totalCost = totalCost,
+            profit = profit,
+            notes = notes,
+            createdBy = currentUser,
+            status = "ACTIVE"
+        )
+        val quoteId = dao.insertInvoice(quotation)
+        val itemsToInsert = cartItems.map { item ->
+            InvoiceItem(
+                invoiceId = quoteId,
+                productId = item.product.id,
+                productName = item.product.name,
+                unitName = item.unitName,
+                isMainUnit = item.isMainUnit,
+                quantity = item.quantity,
+                unitPrice = item.unitPrice,
+                unitCost = item.unitCost,
+                subtotal = item.subtotal,
+                discount = item.discount,
+                total = item.total,
+                totalCost = item.totalCost
+            )
+        }
+        dao.insertInvoiceItems(itemsToInsert)
+        logAudit("عرض أسعار", "إنشاء عرض أسعار $quoteNumber بقيمة $totalAmount للعميل ${quotation.partyName}", currentUser)
+        return quoteId
+    }
+
+    suspend fun performSalesReturn(
+        originalInvoice: Invoice,
+        returnedItems: List<InvoiceItem>,
+        returnAmount: Double,
+        refundMethod: String, // CASH or REDUCE_DEBT
+        notes: String,
+        currentUser: String
+    ): Long {
+        val dateFormat = SimpleDateFormat("yyyyMMdd-HHmmss", Locale.ENGLISH)
+        val returnNumber = "RET-" + dateFormat.format(Date())
+        val totalCost = returnedItems.sumOf { it.totalCost }
+
+        val returnInvoice = Invoice(
+            invoiceNumber = returnNumber,
+            invoiceType = "SALE_RETURN",
+            paymentType = if (refundMethod == "CASH") "CASH" else "CREDIT",
+            partyId = originalInvoice.partyId,
+            partyName = originalInvoice.partyName,
+            subtotal = returnAmount,
+            discountAmount = 0.0,
+            taxAmount = 0.0,
+            totalAmount = returnAmount,
+            paidAmount = if (refundMethod == "CASH") returnAmount else 0.0,
+            remainingAmount = 0.0,
+            totalCost = totalCost,
+            profit = 0.0,
+            notes = "مردودات للفاتورة ${originalInvoice.invoiceNumber}. $notes",
+            createdBy = currentUser,
+            status = "COMPLETED"
+        )
+        val returnId = dao.insertInvoice(returnInvoice)
+
+        // Restore stock for returned items
+        val itemsToInsert = mutableListOf<InvoiceItem>()
+        for (item in returnedItems) {
+            itemsToInsert.add(
+                item.copy(id = 0, invoiceId = returnId)
+            )
+            val product = dao.getProductById(item.productId)
+            if (product != null) {
+                val subUnitsReturned = if (item.isMainUnit) item.quantity * product.conversionFactor else item.quantity
+                val newStock = product.currentStockSubUnits + subUnitsReturned
+                dao.updateProduct(product.copy(currentStockSubUnits = newStock))
+                dao.insertInventoryTransaction(
+                    InventoryTransaction(
+                        productId = product.id,
+                        productName = product.name,
+                        transactionType = "RETURN",
+                        quantitySubUnits = subUnitsReturned,
+                        balanceAfterSubUnits = newStock,
+                        unitName = item.unitName,
+                        referenceNumber = returnNumber,
+                        notes = "مردودات مبيعات بالفاتورة $returnNumber",
+                        createdBy = currentUser
+                    )
+                )
+            }
+        }
+        dao.insertInvoiceItems(itemsToInsert)
+
+        // Handle Cash refund if cash
+        if (refundMethod == "CASH" && returnAmount > 0) {
+            val currentCash = getLatestCashBalance()
+            dao.insertCashTransaction(
+                CashTransaction(
+                    type = "OUT",
+                    source = "RETURN",
+                    referenceId = returnId,
+                    referenceNumber = returnNumber,
+                    amount = returnAmount,
+                    balanceAfter = currentCash - returnAmount,
+                    notes = "صرف نقدي لمردودات فاتورة $returnNumber",
+                    createdBy = currentUser
+                )
+            )
+        } else if (originalInvoice.partyId != null && returnAmount > 0) {
+            // Deduct from customer debt
+            val customer = dao.getCustomerById(originalInvoice.partyId)
+            if (customer != null) {
+                dao.updateCustomer(
+                    customer.copy(
+                        currentBalance = maxOf(0.0, customer.currentBalance - returnAmount)
+                    )
+                )
+            }
+        }
+
+        logAudit("مردود مبيعات", "تسجيل مردود مبيعات $returnNumber للفاتورة ${originalInvoice.invoiceNumber} بقيمة $returnAmount", currentUser)
+        return returnId
+    }
+
     suspend fun performReceiptVoucher(
         partyType: String, // CUSTOMER, OTHER
         partyId: Long?,

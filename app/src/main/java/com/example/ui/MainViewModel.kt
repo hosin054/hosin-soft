@@ -259,6 +259,102 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    fun saveQuotation(notes: String, onSuccess: (Long) -> Unit) {
+        viewModelScope.launch {
+            if (_cartItems.value.isEmpty()) {
+                showMessage("السلة فارغة، يرجى إضافة أصناف أولاً")
+                return@launch
+            }
+            try {
+                val qteId = repository.saveQuotation(
+                    customer = _selectedCustomer.value,
+                    cartItems = _cartItems.value,
+                    discountAmount = _posDiscount.value,
+                    taxAmount = _posTax.value,
+                    notes = notes,
+                    currentUser = _currentUser.value.fullName
+                )
+                clearCart()
+                showMessage("تم حفظ عرض الأسعار بنجاح")
+                onSuccess(qteId)
+            } catch (e: Exception) {
+                showMessage("خطأ أثناء حفظ عرض الأسعار: ${e.message}")
+            }
+        }
+    }
+
+    fun loadQuotationToCart(quotationId: Long, onSuccess: () -> Unit) {
+        viewModelScope.launch {
+            try {
+                val quotation = allInvoices.value.find { it.id == quotationId }
+                if (quotation == null) {
+                    showMessage("عرض الأسعار غير موجود")
+                    return@launch
+                }
+                val items = allInvoiceItems.value.filter { it.invoiceId == quotationId }
+                val products = allProducts.value
+                val newCart = mutableListOf<AccountingRepository.CartItem>()
+                for (it in items) {
+                    val prod = products.find { p -> p.id == it.productId }
+                    if (prod != null) {
+                        newCart.add(
+                            AccountingRepository.CartItem(
+                                product = prod,
+                                isMainUnit = it.isMainUnit,
+                                quantity = it.quantity,
+                                unitPrice = it.unitPrice,
+                                unitCost = it.unitCost,
+                                discount = it.discount
+                            )
+                        )
+                    }
+                }
+                _cartItems.value = newCart
+                _posDiscount.value = quotation.discountAmount
+                _posTax.value = quotation.taxAmount
+                if (quotation.partyId != null) {
+                    _selectedCustomer.value = allCustomers.value.find { it.id == quotation.partyId }
+                } else {
+                    _selectedCustomer.value = null
+                }
+                showMessage("تم تحميل أصناف عرض الأسعار إلى سلة البيع")
+                onSuccess()
+            } catch (e: Exception) {
+                showMessage("خطأ أثناء تحميل عرض الأسعار: ${e.message}")
+            }
+        }
+    }
+
+    fun performSalesReturn(
+        originalInvoice: Invoice,
+        returnedItems: List<InvoiceItem>,
+        returnAmount: Double,
+        refundMethod: String,
+        notes: String,
+        onSuccess: (Long) -> Unit
+    ) {
+        viewModelScope.launch {
+            if (returnedItems.isEmpty() || returnAmount <= 0) {
+                showMessage("يرجى تحديد الأصناف المراد إرجاعها")
+                return@launch
+            }
+            try {
+                val retId = repository.performSalesReturn(
+                    originalInvoice = originalInvoice,
+                    returnedItems = returnedItems,
+                    returnAmount = returnAmount,
+                    refundMethod = refundMethod,
+                    notes = notes,
+                    currentUser = _currentUser.value.fullName
+                )
+                showMessage("تم تسجيل مردود المبيعات وتحديث المخزون")
+                onSuccess(retId)
+            } catch (e: Exception) {
+                showMessage("خطأ أثناء تسجيل المردود: ${e.message}")
+            }
+        }
+    }
+
     // --- Purchases Cart State ---
     private val _purchaseItems = MutableStateFlow<List<AccountingRepository.CartItem>>(emptyList())
     val purchaseItems: StateFlow<List<AccountingRepository.CartItem>> = _purchaseItems.asStateFlow()

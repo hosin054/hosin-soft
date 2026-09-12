@@ -29,4 +29,8 @@ sealed class Screen(val route: String, val title: String) {
         fun createRoute(invoiceId: Long) = "invoice_detail/$invoiceId"
     }
     object AuditLogs : Screen("audit_logs", "سجل العمليات")
+    object Quotations : Screen("quotations", "عروض الأسعار")
+    object BarcodeLabels : Screen("barcode_labels?productId={productId}", "طباعة ملصقات الباركود والأسعار") {
+        fun createRoute(productId: Long = 0L) = "barcode_labels?productId=$productId"
+    }
 }

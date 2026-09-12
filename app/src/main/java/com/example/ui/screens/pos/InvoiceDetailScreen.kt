@@ -41,6 +41,7 @@ fun InvoiceDetailScreen(
     val items = allItems.filter { it.invoiceId == invoiceId }
 
     var showCancelDialog by remember { mutableStateOf(false) }
+    var showReturnDialog by remember { mutableStateOf(false) }
 
     Scaffold(
         topBar = {
@@ -214,37 +215,160 @@ fun InvoiceDetailScreen(
 
                 // Action buttons
                 item {
-                    Row(modifier = Modifier.fillMaxWidth()) {
-                        Button(
-                            onClick = {
-                                val text = InvoicePrinter.generateReceiptText(invoice, items, settings)
-                                BackupHelper.shareText(context, text, "فاتورة ${invoice.invoiceNumber}")
-                            },
-                            modifier = Modifier.weight(1f),
-                            shape = RoundedCornerShape(8.dp)
-                        ) {
-                            Icon(Icons.Default.Print, contentDescription = null)
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text("طباعة / مشاركة")
-                        }
-
-                        if (invoice.status != "CANCELLED") {
-                            Spacer(modifier = Modifier.width(8.dp))
-                            OutlinedButton(
-                                onClick = { showCancelDialog = true },
-                                colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error),
+                    Column(modifier = Modifier.fillMaxWidth()) {
+                        Row(modifier = Modifier.fillMaxWidth()) {
+                            Button(
+                                onClick = {
+                                    val text = InvoicePrinter.generateReceiptText(invoice, items, settings)
+                                    BackupHelper.shareText(context, text, "فاتورة ${invoice.invoiceNumber}")
+                                },
                                 modifier = Modifier.weight(1f),
                                 shape = RoundedCornerShape(8.dp)
                             ) {
-                                Icon(Icons.Default.Cancel, contentDescription = null)
+                                Icon(Icons.Default.Print, contentDescription = null)
                                 Spacer(modifier = Modifier.width(6.dp))
-                                Text("إلغاء الفاتورة")
+                                Text("طباعة / مشاركة")
+                            }
+
+                            if (invoice.status != "CANCELLED") {
+                                Spacer(modifier = Modifier.width(8.dp))
+                                OutlinedButton(
+                                    onClick = { showCancelDialog = true },
+                                    colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error),
+                                    modifier = Modifier.weight(1f),
+                                    shape = RoundedCornerShape(8.dp)
+                                ) {
+                                    Icon(Icons.Default.Cancel, contentDescription = null)
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text("إلغاء الفاتورة")
+                                }
+                            }
+                        }
+
+                        if (invoice.invoiceType == "SALE" && invoice.status != "CANCELLED") {
+                            Spacer(modifier = Modifier.height(8.dp))
+                            FilledTonalButton(
+                                onClick = { showReturnDialog = true },
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(8.dp)
+                            ) {
+                                Icon(Icons.Default.AssignmentReturn, contentDescription = null)
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text("تسجيل مردود مبيعات (إرجاع أصناف)")
                             }
                         }
                     }
                 }
             }
         }
+    }
+
+    // Sales Return Dialog
+    if (showReturnDialog && invoice != null) {
+        val selectedItemIds = remember { mutableStateMapOf<Long, Boolean>().apply { items.forEach { put(it.id, true) } } }
+        var refundMethod by remember { mutableStateOf(if (invoice.paymentType == "CASH") "CASH" else "REDUCE_DEBT") }
+        var returnNotes by remember { mutableStateOf("") }
+
+        val itemsToReturn = items.filter { selectedItemIds[it.id] == true }
+        val calculatedReturnTotal = itemsToReturn.sumOf { it.total }
+
+        AlertDialog(
+            onDismissRequest = { showReturnDialog = false },
+            title = { Text("تسجيل مردود مبيعات") },
+            text = {
+                Column(modifier = Modifier.fillMaxWidth().heightIn(max = 380.dp)) {
+                    Text(
+                        text = "اختر الأصناف التي يريد العميل إرجاعها إلى المخزن:",
+                        fontSize = 13.sp
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    LazyColumn(
+                        modifier = Modifier.weight(1f, fill = false),
+                        verticalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        items(items) { item ->
+                            val isChecked = selectedItemIds[item.id] ?: false
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Checkbox(
+                                    checked = isChecked,
+                                    onCheckedChange = { selectedItemIds[item.id] = it }
+                                )
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(item.productName, fontWeight = FontWeight.Medium, fontSize = 13.sp)
+                                    Text("${item.quantity} ${item.unitName} - ${Formatters.formatMoney(item.total, settings)}", fontSize = 11.sp, color = MaterialTheme.colorScheme.outline)
+                                }
+                            }
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(10.dp))
+                    Text(text = "طريقة الإرجاع والرد المالي:", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        FilterChip(
+                            selected = refundMethod == "CASH",
+                            onClick = { refundMethod = "CASH" },
+                            label = { Text("صرف نقدي من الصندوق") },
+                            modifier = Modifier.weight(1f)
+                        )
+                        FilterChip(
+                            selected = refundMethod == "REDUCE_DEBT",
+                            onClick = { refundMethod = "REDUCE_DEBT" },
+                            label = { Text("خصم من ذمة العميل") },
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(8.dp))
+                    OutlinedTextField(
+                        value = returnNotes,
+                        onValueChange = { returnNotes = it },
+                        label = { Text("سبب الإرجاع (ملاحظات)") },
+                        placeholder = { Text("تالف / رغبة العميل...") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                        Text("إجمالي قيمة المردود:", fontWeight = FontWeight.Bold)
+                        Text(
+                            text = Formatters.formatMoney(calculatedReturnTotal, settings),
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    }
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        viewModel.performSalesReturn(
+                            originalInvoice = invoice,
+                            returnedItems = itemsToReturn,
+                            returnAmount = calculatedReturnTotal,
+                            refundMethod = refundMethod,
+                            notes = returnNotes.trim(),
+                            onSuccess = {
+                                showReturnDialog = false
+                            }
+                        )
+                    },
+                    enabled = itemsToReturn.isNotEmpty()
+                ) {
+                    Text("تأكيد تسجيل المردود")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showReturnDialog = false }) {
+                    Text("إلغاء")
+                }
+            }
+        )
     }
 
     // Cancel Invoice Confirmation Dialog

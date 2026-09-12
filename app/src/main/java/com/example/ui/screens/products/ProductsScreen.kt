@@ -28,7 +28,8 @@ import com.example.ui.util.Formatters
 fun ProductsScreen(
     viewModel: MainViewModel,
     onNavigateToForm: (Long) -> Unit,
-    onNavigateToInventory: () -> Unit
+    onNavigateToInventory: () -> Unit,
+    onNavigateToBarcodeLabels: (Long) -> Unit = {}
 ) {
     val settings by viewModel.settings.collectAsStateWithLifecycle()
     val products by viewModel.allProducts.collectAsStateWithLifecycle()
@@ -61,6 +62,9 @@ fun ProductsScreen(
             TopAppBar(
                 title = { Text("إدارة المنتجات والأصناف") },
                 actions = {
+                    IconButton(onClick = { onNavigateToBarcodeLabels(0L) }) {
+                        Icon(Icons.Default.QrCode, contentDescription = "ملصقات الباركود", tint = MaterialTheme.colorScheme.onPrimary)
+                    }
                     IconButton(onClick = onNavigateToInventory) {
                         Icon(Icons.Default.Inventory2, contentDescription = "سجل المخزون", tint = MaterialTheme.colorScheme.onPrimary)
                     }
@@ -158,6 +162,7 @@ fun ProductsScreen(
                             settings = settings,
                             onEdit = { onNavigateToForm(product.id) },
                             onAdjustStock = { productToAdjust = product },
+                            onPrintLabel = { onNavigateToBarcodeLabels(product.id) },
                             onDelete = { productToDelete = product }
                         )
                     }
@@ -255,6 +260,7 @@ fun ProductCardItem(
     settings: com.example.data.model.StoreSettings?,
     onEdit: () -> Unit,
     onAdjustStock: () -> Unit,
+    onPrintLabel: () -> Unit,
     onDelete: () -> Unit
 ) {
     val isLow = product.currentStockSubUnits <= product.minStockSubUnits
@@ -350,6 +356,11 @@ fun ProductCardItem(
                 horizontalArrangement = Arrangement.End,
                 verticalAlignment = Alignment.CenterVertically
             ) {
+                TextButton(onClick = onPrintLabel) {
+                    Icon(Icons.Default.QrCode, contentDescription = null, modifier = Modifier.size(16.dp))
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text("ملصق سعر", fontSize = 12.sp)
+                }
                 TextButton(onClick = onAdjustStock) {
                     Icon(Icons.Default.Tune, contentDescription = null, modifier = Modifier.size(16.dp))
                     Spacer(modifier = Modifier.width(4.dp))

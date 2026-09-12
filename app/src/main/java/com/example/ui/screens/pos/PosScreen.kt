@@ -45,6 +45,7 @@ fun PosScreen(
     var showBarcodeScanner by remember { mutableStateOf(false) }
     var showCustomerPicker by remember { mutableStateOf(false) }
     var showCheckoutDialog by remember { mutableStateOf(false) }
+    var showSaveQuotationDialog by remember { mutableStateOf(false) }
 
     // Filter products
     val filteredProducts = remember(searchQuery, products) {
@@ -74,6 +75,9 @@ fun PosScreen(
                         Icon(Icons.Default.QrCodeScanner, contentDescription = "مسح باركود", tint = MaterialTheme.colorScheme.onPrimary)
                     }
                     if (cartItems.isNotEmpty()) {
+                        IconButton(onClick = { showSaveQuotationDialog = true }) {
+                            Icon(Icons.Default.RequestQuote, contentDescription = "حفظ كعرض أسعار", tint = MaterialTheme.colorScheme.onPrimary)
+                        }
                         IconButton(onClick = { viewModel.clearCart() }) {
                             Icon(Icons.Default.DeleteSweep, contentDescription = "تفريغ السلة", tint = MaterialTheme.colorScheme.onPrimary)
                         }
@@ -355,6 +359,7 @@ fun PosScreen(
         var paidAmountInput by remember {
             mutableStateOf(if (paymentType == "CASH") String.format(java.util.Locale.ENGLISH, "%.2f", totalAmount) else "0.0")
         }
+        var cashGivenInput by remember { mutableStateOf("") }
         var discountInput by remember { mutableStateOf("0.0") }
         var notesInput by remember { mutableStateOf("") }
 
@@ -362,6 +367,10 @@ fun PosScreen(
         val finalTotal = maxOf(0.0, subtotal - finalDiscount + calculatedTax)
         val finalPaid = if (paymentType == "CASH") finalTotal else (paidAmountInput.toDoubleOrNull() ?: 0.0)
         val remaining = maxOf(0.0, finalTotal - finalPaid)
+
+        val cashGiven = cashGivenInput.toDoubleOrNull() ?: finalTotal
+        val changeDue = maxOf(0.0, cashGiven - finalTotal)
+        val isUnderpaid = paymentType == "CASH" && cashGivenInput.isNotBlank() && cashGiven < finalTotal
 
         AlertDialog(
             onDismissRequest = { showCheckoutDialog = false },
@@ -391,7 +400,7 @@ fun PosScreen(
                         )
                     }
 
-                    Spacer(modifier = Modifier.height(12.dp))
+                    Spacer(modifier = Modifier.height(10.dp))
 
                     Text(text = "العميل: ${selectedCustomer?.name ?: "عميل نقدي"}", fontWeight = FontWeight.Medium)
 
@@ -403,7 +412,7 @@ fun PosScreen(
                         )
                     }
 
-                    Spacer(modifier = Modifier.height(10.dp))
+                    Spacer(modifier = Modifier.height(8.dp))
 
                     OutlinedTextField(
                         value = discountInput,
@@ -426,6 +435,88 @@ fun PosScreen(
                             modifier = Modifier.fillMaxWidth()
                         )
                         Spacer(modifier = Modifier.height(8.dp))
+                    } else {
+                        // Cash tender calculator
+                        Text(text = "حاسبة النقد وباقي العميل:", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                        Spacer(modifier = Modifier.height(4.dp))
+                        OutlinedTextField(
+                            value = cashGivenInput,
+                            onValueChange = { cashGivenInput = it },
+                            label = { Text("المبلغ المستلم من العميل") },
+                            placeholder = { Text(Formatters.formatMoney(finalTotal, settings)) },
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        Spacer(modifier = Modifier.height(6.dp))
+                        // Quick tender buttons
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            SuggestionChip(
+                                onClick = { cashGivenInput = String.format(java.util.Locale.ENGLISH, "%.2f", finalTotal) },
+                                label = { Text("الضبط", fontSize = 10.sp) },
+                                modifier = Modifier.height(28.dp)
+                            )
+                            SuggestionChip(
+                                onClick = {
+                                    val current = cashGivenInput.toDoubleOrNull() ?: 0.0
+                                    cashGivenInput = String.format(java.util.Locale.ENGLISH, "%.0f", current + 50)
+                                },
+                                label = { Text("+50", fontSize = 10.sp) },
+                                modifier = Modifier.height(28.dp)
+                            )
+                            SuggestionChip(
+                                onClick = {
+                                    val current = cashGivenInput.toDoubleOrNull() ?: 0.0
+                                    cashGivenInput = String.format(java.util.Locale.ENGLISH, "%.0f", current + 100)
+                                },
+                                label = { Text("+100", fontSize = 10.sp) },
+                                modifier = Modifier.height(28.dp)
+                            )
+                            SuggestionChip(
+                                onClick = {
+                                    val current = cashGivenInput.toDoubleOrNull() ?: 0.0
+                                    cashGivenInput = String.format(java.util.Locale.ENGLISH, "%.0f", current + 500)
+                                },
+                                label = { Text("+500", fontSize = 10.sp) },
+                                modifier = Modifier.height(28.dp)
+                            )
+                        }
+                        Spacer(modifier = Modifier.height(8.dp))
+
+                        // Change Due Badge
+                        Card(
+                            colors = CardDefaults.cardColors(
+                                containerColor = if (isUnderpaid) MaterialTheme.colorScheme.errorContainer else Color(0xFFDCFCE7)
+                            ),
+                            shape = RoundedCornerShape(8.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .padding(8.dp)
+                                    .fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = if (isUnderpaid) "المستلم أقل من المطلوب!" else "الباقي للعميل:",
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 12.sp,
+                                    color = if (isUnderpaid) MaterialTheme.colorScheme.error else Color(0xFF166534)
+                                )
+                                Text(
+                                    text = if (isUnderpaid) Formatters.formatMoney(finalTotal - cashGiven, settings)
+                                    else Formatters.formatMoney(changeDue, settings),
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 14.sp,
+                                    color = if (isUnderpaid) MaterialTheme.colorScheme.error else Color(0xFF166534)
+                                )
+                            }
+                        }
+                        Spacer(modifier = Modifier.height(8.dp))
                     }
 
                     OutlinedTextField(
@@ -436,7 +527,7 @@ fun PosScreen(
                         modifier = Modifier.fillMaxWidth()
                     )
 
-                    Spacer(modifier = Modifier.height(12.dp))
+                    Spacer(modifier = Modifier.height(10.dp))
 
                     Card(
                         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
@@ -489,6 +580,47 @@ fun PosScreen(
             },
             dismissButton = {
                 TextButton(onClick = { showCheckoutDialog = false }) {
+                    Text("إلغاء")
+                }
+            }
+        )
+    }
+
+    // Save Quotation Dialog
+    if (showSaveQuotationDialog) {
+        var quotationNotes by remember { mutableStateOf("") }
+        AlertDialog(
+            onDismissRequest = { showSaveQuotationDialog = false },
+            title = { Text("حفظ كعرض أسعار") },
+            text = {
+                Column {
+                    Text(
+                        text = "سيتم حفظ أصناف السلة الحالية كعرض أسعار رسمي للعميل (${selectedCustomer?.name ?: "عميل عام"}). يمكنك طباعته أو مشاركته أو تحويله لفاتورة بيع لاحقاً.",
+                        fontSize = 13.sp
+                    )
+                    Spacer(modifier = Modifier.height(10.dp))
+                    OutlinedTextField(
+                        value = quotationNotes,
+                        onValueChange = { quotationNotes = it },
+                        label = { Text("ملاحظات وشروط العرض") },
+                        placeholder = { Text("مثال: العرض سارٍ لمدة 15 يوماً من تاريخه") },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        viewModel.saveQuotation(quotationNotes.trim()) {
+                            showSaveQuotationDialog = false
+                        }
+                    }
+                ) {
+                    Text("حفظ عرض الأسعار")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showSaveQuotationDialog = false }) {
                     Text("إلغاء")
                 }
             }
