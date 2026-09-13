@@ -99,6 +99,58 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     val allInventoryTransactions = repository.allInventoryTransactions
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
+    // Journal Vouchers (سندات القيد)
+    val allJournalVouchers = repository.allJournalVouchers
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    val allJournalVoucherLines = repository.allJournalVoucherLines
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    fun getJournalLines(voucherId: Long): Flow<List<JournalVoucherLine>> {
+        return repository.getJournalLines(voucherId)
+    }
+
+    // Closing Accounts (الحسابات الختامية)
+    private data class BundlePart1(
+        val inv: List<Invoice>,
+        val prod: List<Product>,
+        val cust: List<Customer>,
+        val supp: List<Supplier>
+    )
+
+    private data class BundlePart2(
+        val exp: List<Expense>,
+        val cash: List<CashTransaction>,
+        val jv: List<JournalVoucher>,
+        val lines: List<JournalVoucherLine>
+    )
+
+    val closingAccountsBundle: StateFlow<ClosingAccountsBundle> = combine(
+        combine(allInvoices, allProducts, allCustomers, allSuppliers) { inv, prod, cust, supp ->
+            BundlePart1(inv, prod, cust, supp)
+        },
+        combine(allExpenses, allCashTransactions, allJournalVouchers, allJournalVoucherLines) { exp, cash, jv, lines ->
+            BundlePart2(exp, cash, jv, lines)
+        }
+    ) { p1, p2 ->
+        com.example.ui.util.ClosingAccountsCalculator.calculate(
+            invoices = p1.inv,
+            products = p1.prod,
+            customers = p1.cust,
+            suppliers = p1.supp,
+            expenses = p2.exp,
+            cashTransactions = p2.cash,
+            journalVouchers = p2.jv,
+            journalLines = p2.lines
+        )
+    }.stateIn(
+        viewModelScope,
+        SharingStarted.WhileSubscribed(5000),
+        com.example.ui.util.ClosingAccountsCalculator.calculate(
+            emptyList(), emptyList(), emptyList(), emptyList(), emptyList(), emptyList(), emptyList(), emptyList()
+        )
+    )
+
     // Audit Logs
     val allAuditLogs = repository.allAuditLogs
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
@@ -721,6 +773,56 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 )
                 showMessage("تم تسجيل المصروف بنجاح")
                 onSuccess()
+            } catch (e: Exception) {
+                showMessage("خطأ: ${e.message}")
+            }
+        }
+    }
+
+    // --- Journal Vouchers (سندات القيد) ---
+    fun createJournalVoucher(
+        date: Long,
+        reference: String,
+        narration: String,
+        lines: List<JournalVoucherLine>,
+        onSuccess: () -> Unit
+    ) {
+        viewModelScope.launch {
+            if (lines.size < 2) {
+                showMessage("يجب أن يحتوي سند القيد على طرفين على الأقل (مدين ودائن)")
+                return@launch
+            }
+            val totalDebit = lines.sumOf { it.debit }
+            val totalCredit = lines.sumOf { it.credit }
+            if (totalDebit <= 0) {
+                showMessage("يجب إدخال مبالغ أكبر من الصفر")
+                return@launch
+            }
+            if (Math.abs(totalDebit - totalCredit) > 0.001) {
+                showMessage("القيد غير متزن! إجمالي المدين ($totalDebit) لا يساوي إجمالي الدائن ($totalCredit)")
+                return@launch
+            }
+            try {
+                repository.performJournalVoucher(
+                    date = date,
+                    reference = reference,
+                    narration = narration,
+                    lines = lines,
+                    currentUser = _currentUser.value.fullName
+                )
+                showMessage("تم حفظ وترحيل سند القيد بنجاح")
+                onSuccess()
+            } catch (e: Exception) {
+                showMessage("خطأ: ${e.message}")
+            }
+        }
+    }
+
+    fun deleteJournalVoucher(voucher: JournalVoucher) {
+        viewModelScope.launch {
+            try {
+                repository.deleteJournalVoucher(voucher, _currentUser.value.fullName)
+                showMessage("تم حذف سند القيد وعكس أثره بنجاح")
             } catch (e: Exception) {
                 showMessage("خطأ: ${e.message}")
             }

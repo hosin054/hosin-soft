@@ -244,4 +244,36 @@ interface AppDao {
 
     @Delete
     suspend fun deleteCurrencyRate(currencyRate: CurrencyRate)
+
+    // --- Journal Vouchers (سندات القيد) ---
+    @Query("SELECT * FROM journal_vouchers ORDER BY voucherDate DESC, id DESC")
+    fun getAllJournalVouchers(): Flow<List<JournalVoucher>>
+
+    @Query("SELECT * FROM journal_vouchers WHERE id = :id LIMIT 1")
+    suspend fun getJournalVoucherById(id: Long): JournalVoucher?
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertJournalVoucher(voucher: JournalVoucher): Long
+
+    @Delete
+    suspend fun deleteJournalVoucher(voucher: JournalVoucher)
+
+    // --- Journal Voucher Lines ---
+    @Query("SELECT * FROM journal_voucher_lines WHERE voucherId = :voucherId ORDER BY id ASC")
+    fun getJournalVoucherLines(voucherId: Long): Flow<List<JournalVoucherLine>>
+
+    @Query("SELECT * FROM journal_voucher_lines WHERE voucherId = :voucherId ORDER BY id ASC")
+    suspend fun getJournalVoucherLinesDirect(voucherId: Long): List<JournalVoucherLine>
+
+    @Query("SELECT * FROM journal_voucher_lines ORDER BY id ASC")
+    fun getAllJournalVoucherLines(): Flow<List<JournalVoucherLine>>
+
+    @Query("SELECT * FROM journal_voucher_lines ORDER BY id ASC")
+    suspend fun getAllJournalVoucherLinesDirect(): List<JournalVoucherLine>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertJournalVoucherLines(lines: List<JournalVoucherLine>)
+
+    @Query("DELETE FROM journal_voucher_lines WHERE voucherId = :voucherId")
+    suspend fun deleteJournalVoucherLinesByVoucherId(voucherId: Long)
 }

@@ -28,7 +28,9 @@ import java.util.Locale
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ReportsScreen(
-    viewModel: MainViewModel
+    viewModel: MainViewModel,
+    onNavigateToClosingAccounts: () -> Unit = {},
+    onNavigateToJournal: () -> Unit = {}
 ) {
     val context = LocalContext.current
     val settings by viewModel.settings.collectAsStateWithLifecycle()
@@ -167,18 +169,19 @@ fun ReportsScreen(
         return
     }
 
+    val periodLabel = when (dateFilter) {
+        0 -> "اليوم"
+        1 -> "الشهر الحالي"
+        2 -> "العام الحالي"
+        else -> "كافة الفترات"
+    }
+
     Scaffold(
         topBar = {
             TopAppBar(
                 title = { Text("التقارير المالية والأرباح") },
                 actions = {
                     IconButton(onClick = {
-                        val periodLabel = when (dateFilter) {
-                            0 -> "اليوم"
-                            1 -> "الشهر الحالي"
-                            2 -> "العام الحالي"
-                            else -> "كافة الفترات"
-                        }
                         val text = """
                             تقرير الأرباح والمالية - ${settings?.storeName}
                             الفترة: $periodLabel
@@ -243,6 +246,53 @@ ${if (currentUser.canViewProfits) "📈 صافي الربح النهائي: ${to
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
+            // Closing Accounts & Financial Statements Entry Card
+            item {
+                Card(
+                    shape = RoundedCornerShape(14.dp),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(modifier = Modifier.padding(14.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.AccountBalance, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("الحسابات الختامية والمركز المالي", fontWeight = FontWeight.Bold, fontSize = 15.sp, color = MaterialTheme.colorScheme.onPrimaryContainer)
+                        }
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            "ميزان المراجعة بالمجاميع والأرصدة • الميزانية العمومية • قائمة الدخل • حساب المتاجرة",
+                            fontSize = 11.sp,
+                            color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f)
+                        )
+                        Spacer(modifier = Modifier.height(10.dp))
+                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Button(
+                                onClick = onNavigateToClosingAccounts,
+                                modifier = Modifier.weight(1.3f),
+                                shape = RoundedCornerShape(8.dp),
+                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 6.dp)
+                            ) {
+                                Icon(Icons.Default.Balance, contentDescription = null, modifier = Modifier.size(16.dp))
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text("فتح الحسابات الختامية", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                            }
+
+                            OutlinedButton(
+                                onClick = onNavigateToJournal,
+                                modifier = Modifier.weight(1f),
+                                shape = RoundedCornerShape(8.dp),
+                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 6.dp)
+                            ) {
+                                Icon(Icons.Default.PostAdd, contentDescription = null, modifier = Modifier.size(16.dp))
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text("سندات القيد", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                            }
+                        }
+                    }
+                }
+            }
+
             // Period Filter Chips
             item {
                 Row(modifier = Modifier.fillMaxWidth()) {

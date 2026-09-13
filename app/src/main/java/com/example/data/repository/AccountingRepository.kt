@@ -74,6 +74,12 @@ class AccountingRepository(private val dao: AppDao) {
     fun getVouchersByType(type: String): Flow<List<Voucher>> = dao.getVouchersByType(type)
     fun getVouchersByParty(partyId: Long): Flow<List<Voucher>> = dao.getVouchersByParty(partyId)
 
+    // Journal Vouchers (سندات القيد)
+    val allJournalVouchers: Flow<List<JournalVoucher>> = dao.getAllJournalVouchers()
+    val allJournalVoucherLines: Flow<List<JournalVoucherLine>> = dao.getAllJournalVoucherLines()
+    fun getJournalLines(voucherId: Long): Flow<List<JournalVoucherLine>> = dao.getJournalVoucherLines(voucherId)
+    suspend fun getJournalLinesDirect(voucherId: Long): List<JournalVoucherLine> = dao.getJournalVoucherLinesDirect(voucherId)
+
     // Expenses
     val allExpenses: Flow<List<Expense>> = dao.getAllExpenses()
     suspend fun deleteExpense(expense: Expense) = dao.deleteExpense(expense)
@@ -1078,5 +1084,143 @@ class AccountingRepository(private val dao: AppDao) {
             dao.insertUser(defaultCashier)
             dao.insertUser(defaultAccountant)
         }
+    }
+
+    suspend fun performJournalVoucher(
+        date: Long,
+        reference: String,
+        narration: String,
+        lines: List<JournalVoucherLine>,
+        currentUser: String
+    ): Long {
+        val dateFormat = SimpleDateFormat("yyyyMMdd-HHmmss", Locale.ENGLISH)
+        val voucherNumber = "JV-" + dateFormat.format(Date(date))
+
+        val totalDebit = lines.sumOf { it.debit }
+        val totalCredit = lines.sumOf { it.credit }
+        val isBalanced = Math.abs(totalDebit - totalCredit) < 0.001
+
+        val voucher = JournalVoucher(
+            voucherNumber = voucherNumber,
+            voucherDate = date,
+            reference = reference,
+            narration = narration,
+            totalDebit = totalDebit,
+            totalCredit = totalCredit,
+            isBalanced = isBalanced,
+            status = "POSTED",
+            createdBy = currentUser
+        )
+        val voucherId = dao.insertJournalVoucher(voucher)
+
+        val linesWithId = lines.map { it.copy(voucherId = voucherId) }
+        dao.insertJournalVoucherLines(linesWithId)
+
+        // Update balances for Cash, Customers, and Suppliers
+        for (line in linesWithId) {
+            // Cash impact
+            if (line.partyType == "CASH" || line.accountCode == "101" || line.accountName.contains("الصندوق")) {
+                val netCashChange = line.debit - line.credit
+                if (Math.abs(netCashChange) > 0.0001) {
+                    val currentCash = getLatestCashBalance()
+                    val type = if (netCashChange > 0) "IN" else "OUT"
+                    val amount = Math.abs(netCashChange)
+                    dao.insertCashTransaction(
+                        CashTransaction(
+                            type = type,
+                            source = "JOURNAL_VOUCHER",
+                            referenceId = voucherId,
+                            referenceNumber = voucherNumber,
+                            amount = amount,
+                            balanceAfter = if (type == "IN") currentCash + amount else currentCash - amount,
+                            notes = "سند قيد رقم $voucherNumber: ${line.description.ifBlank { narration }}",
+                            createdBy = currentUser
+                        )
+                    )
+                }
+            }
+
+            // Customer impact: In accounting, debiting customer increases receivable (debt), crediting reduces debt
+            if (line.partyType == "CUSTOMER" && line.partyId != null) {
+                val customer = dao.getCustomerById(line.partyId)
+                if (customer != null) {
+                    val balanceDelta = line.debit - line.credit
+                    dao.updateCustomer(
+                        customer.copy(
+                            currentBalance = customer.currentBalance + balanceDelta
+                        )
+                    )
+                }
+            }
+
+            // Supplier impact: In accounting, crediting supplier increases payable (owed to supplier), debiting reduces payable
+            if (line.partyType == "SUPPLIER" && line.partyId != null) {
+                val supplier = dao.getSupplierById(line.partyId)
+                if (supplier != null) {
+                    val balanceDelta = line.credit - line.debit
+                    dao.updateSupplier(
+                        supplier.copy(
+                            currentBalance = supplier.currentBalance + balanceDelta
+                        )
+                    )
+                }
+            }
+        }
+
+        logAudit(
+            action = "سند قيد",
+            details = "إنشاء سند قيد $voucherNumber بمبلغ $totalDebit: $narration",
+            user = currentUser
+        )
+
+        return voucherId
+    }
+
+    suspend fun deleteJournalVoucher(voucher: JournalVoucher, currentUser: String) {
+        val lines = dao.getJournalVoucherLinesDirect(voucher.id)
+        // Reverse impacts on customers / suppliers / cash
+        for (line in lines) {
+            if (line.partyType == "CUSTOMER" && line.partyId != null) {
+                val customer = dao.getCustomerById(line.partyId)
+                if (customer != null) {
+                    val balanceDelta = line.debit - line.credit
+                    dao.updateCustomer(customer.copy(currentBalance = customer.currentBalance - balanceDelta))
+                }
+            }
+            if (line.partyType == "SUPPLIER" && line.partyId != null) {
+                val supplier = dao.getSupplierById(line.partyId)
+                if (supplier != null) {
+                    val balanceDelta = line.credit - line.debit
+                    dao.updateSupplier(supplier.copy(currentBalance = supplier.currentBalance - balanceDelta))
+                }
+            }
+            if (line.partyType == "CASH" || line.accountCode == "101" || line.accountName.contains("الصندوق")) {
+                val netCashChange = line.debit - line.credit
+                if (Math.abs(netCashChange) > 0.0001) {
+                    val currentCash = getLatestCashBalance()
+                    val reverseType = if (netCashChange > 0) "OUT" else "IN"
+                    val amount = Math.abs(netCashChange)
+                    dao.insertCashTransaction(
+                        CashTransaction(
+                            type = reverseType,
+                            source = "CANCEL_JOURNAL_VOUCHER",
+                            referenceId = voucher.id,
+                            referenceNumber = voucher.voucherNumber,
+                            amount = amount,
+                            balanceAfter = if (reverseType == "IN") currentCash + amount else currentCash - amount,
+                            notes = "إلغاء أثر سند قيد رقم ${voucher.voucherNumber}",
+                            createdBy = currentUser
+                        )
+                    )
+                }
+            }
+        }
+        dao.deleteJournalVoucherLinesByVoucherId(voucher.id)
+        dao.deleteJournalVoucher(voucher)
+        logAudit(
+            action = "حذف سند قيد",
+            details = "حذف سند قيد ${voucher.voucherNumber} بقيمة ${voucher.totalDebit}",
+            user = currentUser
+        )
     }
 }

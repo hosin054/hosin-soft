@@ -28,7 +28,8 @@ import com.example.ui.util.Formatters
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun VouchersScreen(
-    viewModel: MainViewModel
+    viewModel: MainViewModel,
+    onNavigateToJournal: () -> Unit = {}
 ) {
     val context = LocalContext.current
     val settings by viewModel.settings.collectAsStateWithLifecycle()
@@ -49,6 +50,21 @@ fun VouchersScreen(
         topBar = {
             TopAppBar(
                 title = { Text("السندات المالية (قبض وصرف)") },
+                actions = {
+                    FilledTonalButton(
+                        onClick = onNavigateToJournal,
+                        colors = ButtonDefaults.filledTonalButtonColors(
+                            containerColor = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.2f),
+                            contentColor = MaterialTheme.colorScheme.onPrimary
+                        ),
+                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+                        modifier = Modifier.padding(end = 8.dp)
+                    ) {
+                        Icon(Icons.Default.PostAdd, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("سندات القيد", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                    }
+                },
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = MaterialTheme.colorScheme.primary,
                     titleContentColor = MaterialTheme.colorScheme.onPrimary

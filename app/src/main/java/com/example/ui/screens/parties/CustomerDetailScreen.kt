@@ -8,6 +8,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -55,6 +56,21 @@ fun CustomerDetailScreen(
                 },
                 actions = {
                     if (customer != null) {
+                        IconButton(onClick = {
+                            val text = StringBuilder()
+                            text.append("📋 *كشف حساب العميل: ${customer.name}*\n")
+                            text.append("المتجر: ${settings?.storeName ?: "حسين سوفت"}\n")
+                            if (customer.phone.isNotBlank()) text.append("📱 الهاتف: ${customer.phone}\n")
+                            text.append("━━━━━━━━━━━━━━━━━━━\n")
+                            text.append("💰 الرصيد الحالي المستحق: ${Formatters.formatMoney(customer.currentBalance, settings)}\n")
+                            text.append("🛒 إجمالي المسحوبات: ${Formatters.formatMoney(customer.totalSales, settings)}\n")
+                            text.append("💵 إجمالي المدفوعات: ${Formatters.formatMoney(customer.totalPaid, settings)}\n")
+                            text.append("━━━━━━━━━━━━━━━━━━━\n")
+                            text.append("🚀 حسين سوفت لإدارة المتاجر")
+                            BackupHelper.shareToTelegram(context, text.toString(), "كشف حساب ${customer.name}")
+                        }) {
+                            Icon(Icons.AutoMirrored.Filled.Send, contentDescription = "إرسال إلى تلغرام", tint = MaterialTheme.colorScheme.onPrimary)
+                        }
                         IconButton(onClick = {
                             val text = StringBuilder()
                             text.append("كشف حساب العميل: ${customer.name}\n")

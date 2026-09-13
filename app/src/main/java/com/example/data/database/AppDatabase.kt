@@ -22,9 +22,11 @@ import com.example.data.model.*
         Expense::class,
         CashTransaction::class,
         InventoryTransaction::class,
-        AuditLog::class
+        AuditLog::class,
+        JournalVoucher::class,
+        JournalVoucherLine::class
     ],
-    version = 3,
+    version = 4,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {

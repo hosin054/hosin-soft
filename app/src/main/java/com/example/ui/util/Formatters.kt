@@ -7,10 +7,18 @@ import java.util.Locale
 
 object Formatters {
 
-    fun formatMoney(amount: Double, settings: StoreSettings?): String {
+    fun formatMoney(amount: Double, settings: StoreSettings? = null): String {
         val decimals = settings?.decimalPlaces ?: 2
         val symbol = settings?.currencySymbol ?: "ر.س"
         return String.format(Locale.ENGLISH, "%.${decimals}f %s", amount, symbol)
+    }
+
+    fun formatRaw(amount: Double): String {
+        return if (amount % 1.0 == 0.0) {
+            amount.toLong().toString()
+        } else {
+            String.format(Locale.ENGLISH, "%.2f", amount)
+        }
     }
 
     fun formatDate(timestamp: Long): String {

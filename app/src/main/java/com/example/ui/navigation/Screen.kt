@@ -35,4 +35,7 @@ sealed class Screen(val route: String, val title: String) {
         fun createRoute(productId: Long = 0L) = "barcode_labels?productId=$productId"
     }
     object Users : Screen("users", "إدارة المستخدمين والموظفين والصلاحيات")
+    object JournalVouchers : Screen("journal_vouchers", "سندات القيد اليومية")
+    object ClosingAccounts : Screen("closing_accounts", "الحسابات الختامية والميزانية")
 }
+

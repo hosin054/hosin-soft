@@ -231,3 +231,31 @@ data class AuditLog(
     @Ignore
     val performedBy: String = userName
 }
+
+@Entity(tableName = "journal_vouchers")
+data class JournalVoucher(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val voucherNumber: String,
+    val voucherDate: Long = System.currentTimeMillis(),
+    val reference: String = "",
+    val narration: String = "",
+    val totalDebit: Double = 0.0,
+    val totalCredit: Double = 0.0,
+    val isBalanced: Boolean = true,
+    val status: String = "POSTED", // POSTED, DRAFT, CANCELLED
+    val createdBy: String = "مدير النظام",
+    val createdAt: Long = System.currentTimeMillis()
+)
+
+@Entity(tableName = "journal_voucher_lines")
+data class JournalVoucherLine(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val voucherId: Long,
+    val accountCode: String = "",
+    val accountName: String,
+    val partyType: String = "GENERAL", // CUSTOMER, SUPPLIER, CASH, BANK, CAPITAL, EXPENSE, REVENUE, GENERAL
+    val partyId: Long? = null,
+    val debit: Double = 0.0,
+    val credit: Double = 0.0,
+    val description: String = ""
+)

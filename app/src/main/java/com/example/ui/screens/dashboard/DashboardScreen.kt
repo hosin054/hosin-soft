@@ -454,6 +454,40 @@ ${if (currentUser.canViewProfits) "📊 *صافي أرباح الشهر:* ${Form
                         modifier = Modifier.weight(1f)
                     )
                 }
+                Spacer(modifier = Modifier.height(8.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    QuickActionItem(
+                        icon = Icons.Default.PostAdd,
+                        label = "سند قيد",
+                        color = Color(0xFF0F766E),
+                        onClick = { onNavigateTo(Screen.JournalVouchers.route) },
+                        modifier = Modifier.weight(1f)
+                    )
+                    QuickActionItem(
+                        icon = Icons.Default.AccountBalance,
+                        label = "الختامية",
+                        color = Color(0xFF1E3A8A),
+                        onClick = { onNavigateTo(Screen.ClosingAccounts.route) },
+                        modifier = Modifier.weight(1f)
+                    )
+                    QuickActionItem(
+                        icon = Icons.Default.AccountBalanceWallet,
+                        label = "الصندوق",
+                        color = Color(0xFF16A34A),
+                        onClick = { onNavigateTo(Screen.Cash.route) },
+                        modifier = Modifier.weight(1f)
+                    )
+                    QuickActionItem(
+                        icon = Icons.Default.HistoryEdu,
+                        label = "سجل العمليات",
+                        color = Color(0xFF78350F),
+                        onClick = { onNavigateTo(Screen.AuditLogs.route) },
+                        modifier = Modifier.weight(1f)
+                    )
+                }
             }
 
             // Main KPI Cards

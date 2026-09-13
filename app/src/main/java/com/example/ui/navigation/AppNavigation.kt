@@ -18,6 +18,8 @@ import androidx.navigation.NavType
 import androidx.navigation.compose.*
 import androidx.navigation.navArgument
 import com.example.ui.MainViewModel
+import com.example.ui.screens.accounting.ClosingAccountsScreen
+import com.example.ui.screens.accounting.JournalVouchersScreen
 import com.example.ui.screens.cash.CashScreen
 import com.example.ui.screens.dashboard.DashboardScreen
 import com.example.ui.screens.expenses.ExpensesScreen
@@ -232,7 +234,24 @@ fun AppNavigation(viewModel: MainViewModel) {
             }
 
             composable(Screen.Vouchers.route) {
-                VouchersScreen(viewModel = viewModel)
+                VouchersScreen(
+                    viewModel = viewModel,
+                    onNavigateToJournal = { navController.navigate(Screen.JournalVouchers.route) }
+                )
+            }
+
+            composable(Screen.JournalVouchers.route) {
+                JournalVouchersScreen(
+                    viewModel = viewModel,
+                    onBack = { navController.popBackStack() }
+                )
+            }
+
+            composable(Screen.ClosingAccounts.route) {
+                ClosingAccountsScreen(
+                    viewModel = viewModel,
+                    onBack = { navController.popBackStack() }
+                )
             }
 
             composable(Screen.Expenses.route) {
@@ -244,7 +263,11 @@ fun AppNavigation(viewModel: MainViewModel) {
             }
 
             composable(Screen.Reports.route) {
-                ReportsScreen(viewModel = viewModel)
+                ReportsScreen(
+                    viewModel = viewModel,
+                    onNavigateToClosingAccounts = { navController.navigate(Screen.ClosingAccounts.route) },
+                    onNavigateToJournal = { navController.navigate(Screen.JournalVouchers.route) }
+                )
             }
 
             composable(Screen.ImportExport.route) {

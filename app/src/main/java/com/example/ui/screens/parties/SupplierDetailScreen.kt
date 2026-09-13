@@ -8,6 +8,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -55,6 +56,21 @@ fun SupplierDetailScreen(
                 },
                 actions = {
                     if (supplier != null) {
+                        IconButton(onClick = {
+                            val text = StringBuilder()
+                            text.append("📋 *كشف حساب المورد: ${supplier.name}*\n")
+                            text.append("المتجر: ${settings?.storeName ?: "حسين سوفت"}\n")
+                            if (supplier.phone.isNotBlank()) text.append("📱 الهاتف: ${supplier.phone}\n")
+                            text.append("━━━━━━━━━━━━━━━━━━━\n")
+                            text.append("💰 الرصيد المستحق له: ${Formatters.formatMoney(supplier.currentBalance, settings)}\n")
+                            text.append("🛒 إجمالي التوريدات (المشتريات): ${Formatters.formatMoney(supplier.totalPurchases, settings)}\n")
+                            text.append("💵 إجمالي المسدد له: ${Formatters.formatMoney(supplier.totalPaid, settings)}\n")
+                            text.append("━━━━━━━━━━━━━━━━━━━\n")
+                            text.append("🚀 حسين سوفت لإدارة المتاجر")
+                            BackupHelper.shareToTelegram(context, text.toString(), "كشف حساب مورد ${supplier.name}")
+                        }) {
+                            Icon(Icons.AutoMirrored.Filled.Send, contentDescription = "إرسال إلى تلغرام", tint = MaterialTheme.colorScheme.onPrimary)
+                        }
                         IconButton(onClick = {
                             val text = StringBuilder()
                             text.append("كشف حساب المورد: ${supplier.name}\n")
