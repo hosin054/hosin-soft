@@ -37,5 +37,7 @@ sealed class Screen(val route: String, val title: String) {
     object Users : Screen("users", "إدارة المستخدمين والموظفين والصلاحيات")
     object JournalVouchers : Screen("journal_vouchers", "سندات القيد اليومية")
     object ClosingAccounts : Screen("closing_accounts", "الحسابات الختامية والميزانية")
+    object ChartOfAccounts : Screen("chart_of_accounts", "شجرة الحسابات (الدليل الشجري)")
+    object FinancialTools : Screen("financial_tools", "الأدوات والعمليات المحاسبية المتقدمة")
 }
 

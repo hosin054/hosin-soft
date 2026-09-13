@@ -30,7 +30,9 @@ import java.util.Locale
 fun ReportsScreen(
     viewModel: MainViewModel,
     onNavigateToClosingAccounts: () -> Unit = {},
-    onNavigateToJournal: () -> Unit = {}
+    onNavigateToJournal: () -> Unit = {},
+    onNavigateToChartOfAccounts: () -> Unit = {},
+    onNavigateToFinancialTools: () -> Unit = {}
 ) {
     val context = LocalContext.current
     val settings by viewModel.settings.collectAsStateWithLifecycle()
@@ -287,6 +289,29 @@ ${if (currentUser.canViewProfits) "📈 صافي الربح النهائي: ${to
                                 Icon(Icons.Default.PostAdd, contentDescription = null, modifier = Modifier.size(16.dp))
                                 Spacer(modifier = Modifier.width(4.dp))
                                 Text("سندات القيد", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                            }
+                        }
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            OutlinedButton(
+                                onClick = onNavigateToChartOfAccounts,
+                                modifier = Modifier.weight(1f),
+                                shape = RoundedCornerShape(8.dp),
+                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 6.dp)
+                            ) {
+                                Icon(Icons.Default.AccountTree, contentDescription = null, modifier = Modifier.size(16.dp))
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text("شجرة الحسابات", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                            }
+                            OutlinedButton(
+                                onClick = onNavigateToFinancialTools,
+                                modifier = Modifier.weight(1f),
+                                shape = RoundedCornerShape(8.dp),
+                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 6.dp)
+                            ) {
+                                Icon(Icons.Default.AutoGraph, contentDescription = null, modifier = Modifier.size(16.dp))
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text("الأدوات والوردية", fontSize = 12.sp, fontWeight = FontWeight.Bold)
                             }
                         }
                     }

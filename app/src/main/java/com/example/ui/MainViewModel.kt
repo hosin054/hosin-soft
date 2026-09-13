@@ -159,6 +159,37 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     val allUsers = repository.allUsers
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
+    // --- New ERP & Advanced Accounting StateFlows ---
+    val allChartOfAccounts = repository.allChartOfAccounts
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    val allCostCenters = repository.allCostCenters
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    val allFixedAssets = repository.allFixedAssets
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    val allCheques = repository.allCheques
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    val allAccountTransfers = repository.allAccountTransfers
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    val allShifts = repository.allShifts
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    val allInstallments = repository.allInstallments
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    val allPurchaseOrders = repository.allPurchaseOrders
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    init {
+        viewModelScope.launch {
+            repository.seedDefaultChartOfAccountsIfNeeded()
+        }
+    }
+
     // --- POS Cart State ---
     private val _cartItems = MutableStateFlow<List<AccountingRepository.CartItem>>(emptyList())
     val cartItems: StateFlow<List<AccountingRepository.CartItem>> = _cartItems.asStateFlow()
@@ -1060,6 +1091,261 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             "INVENTORY_MANAGER" -> "أمين مخزن ومستودع"
             "CUSTOM" -> "موظف مخصص"
             else -> role
+        }
+    }
+
+    // --- Chart of Accounts Actions ---
+    fun saveChartAccount(account: ChartOfAccount, onSuccess: () -> Unit = {}) {
+        viewModelScope.launch {
+            try {
+                if (account.id == 0L) {
+                    repository.insertChartOfAccount(account)
+                    repository.logAudit("إضافة حساب", "إضافة حساب جديد: ${account.code} - ${account.name}", _currentUser.value.fullName)
+                } else {
+                    repository.updateChartOfAccount(account)
+                    repository.logAudit("تعديل حساب", "تعديل بيانات الحساب: ${account.code} - ${account.name}", _currentUser.value.fullName)
+                }
+                showMessage("تم حفظ الحساب في شجرة الحسابات بنجاح")
+                onSuccess()
+            } catch (e: Exception) {
+                showMessage("خطأ: ${e.message}")
+            }
+        }
+    }
+
+    fun deleteChartAccount(account: ChartOfAccount) {
+        viewModelScope.launch {
+            try {
+                repository.deleteChartOfAccount(account)
+                repository.logAudit("حذف حساب", "حذف حساب من الشجرة: ${account.name}", _currentUser.value.fullName)
+                showMessage("تم حذف الحساب")
+            } catch (e: Exception) {
+                showMessage("خطأ: ${e.message}")
+            }
+        }
+    }
+
+    // --- Cost Centers Actions ---
+    fun saveCostCenter(costCenter: CostCenter, onSuccess: () -> Unit = {}) {
+        viewModelScope.launch {
+            try {
+                if (costCenter.id == 0L) {
+                    repository.insertCostCenter(costCenter)
+                    repository.logAudit("إضافة مركز تكلفة", "إضافة مركز تكلفة: ${costCenter.name}", _currentUser.value.fullName)
+                } else {
+                    repository.updateCostCenter(costCenter)
+                    repository.logAudit("تعديل مركز تكلفة", "تعديل مركز تكلفة: ${costCenter.name}", _currentUser.value.fullName)
+                }
+                showMessage("تم حفظ مركز التكلفة بنجاح")
+                onSuccess()
+            } catch (e: Exception) {
+                showMessage("خطأ: ${e.message}")
+            }
+        }
+    }
+
+    fun deleteCostCenter(costCenter: CostCenter) {
+        viewModelScope.launch {
+            try {
+                repository.deleteCostCenter(costCenter)
+                showMessage("تم حذف مركز التكلفة")
+            } catch (e: Exception) {
+                showMessage("خطأ: ${e.message}")
+            }
+        }
+    }
+
+    // --- Fixed Assets Actions ---
+    fun saveFixedAsset(asset: FixedAsset, onSuccess: () -> Unit = {}) {
+        viewModelScope.launch {
+            try {
+                if (asset.id == 0L) {
+                    repository.insertFixedAsset(asset)
+                    repository.logAudit("إضافة أصل ثابت", "إضافة أصل جديد: ${asset.name} بقيمة ${asset.purchasePrice}", _currentUser.value.fullName)
+                } else {
+                    repository.updateFixedAsset(asset)
+                }
+                showMessage("تم حفظ الأصل الثابت واحتساب القسط الشهري")
+                onSuccess()
+            } catch (e: Exception) {
+                showMessage("خطأ: ${e.message}")
+            }
+        }
+    }
+
+    fun depreciateFixedAsset(asset: FixedAsset) {
+        viewModelScope.launch {
+            try {
+                repository.executeMonthlyDepreciation(asset, _currentUser.value.fullName)
+                showMessage("تم تسجيل إهلاك شهري للأصل ${asset.name} وتوليد سند القيد تلقائياً")
+            } catch (e: Exception) {
+                showMessage("خطأ: ${e.message}")
+            }
+        }
+    }
+
+    fun deleteFixedAsset(asset: FixedAsset) {
+        viewModelScope.launch {
+            try {
+                repository.deleteFixedAsset(asset)
+                showMessage("تم حذف الأصل")
+            } catch (e: Exception) {
+                showMessage("خطأ: ${e.message}")
+            }
+        }
+    }
+
+    // --- Cheques Actions ---
+    fun saveCheque(cheque: Cheque, onSuccess: () -> Unit = {}) {
+        viewModelScope.launch {
+            try {
+                if (cheque.id == 0L) {
+                    repository.insertCheque(cheque)
+                    repository.logAudit("تسجيل شيك", "تسجيل شيك رقم ${cheque.chequeNumber} بقيمة ${cheque.amount}", _currentUser.value.fullName)
+                } else {
+                    repository.updateCheque(cheque)
+                }
+                showMessage("تم حفظ بيانات الشيك بنجاح")
+                onSuccess()
+            } catch (e: Exception) {
+                showMessage("خطأ: ${e.message}")
+            }
+        }
+    }
+
+    fun updateChequeStatus(cheque: Cheque, newStatus: String) {
+        viewModelScope.launch {
+            try {
+                repository.updateChequeStatus(cheque, newStatus, _currentUser.value.fullName)
+                showMessage("تم تحديث حالة الشيك إلى: $newStatus وتأثير الصندوق إذا كان محصلاً")
+            } catch (e: Exception) {
+                showMessage("خطأ: ${e.message}")
+            }
+        }
+    }
+
+    fun deleteCheque(cheque: Cheque) {
+        viewModelScope.launch {
+            try {
+                repository.deleteCheque(cheque)
+                showMessage("تم حذف الشيك")
+            } catch (e: Exception) {
+                showMessage("خطأ: ${e.message}")
+            }
+        }
+    }
+
+    // --- Account Transfers ---
+    fun performTransfer(
+        fromAccount: String,
+        toAccount: String,
+        amount: Double,
+        fee: Double = 0.0,
+        notes: String = "",
+        onSuccess: () -> Unit = {}
+    ) {
+        viewModelScope.launch {
+            try {
+                if (amount <= 0) {
+                    showMessage("يجب إدخال مبلغ صحيح للتحويل")
+                    return@launch
+                }
+                repository.performAccountTransfer(
+                    fromAccount = fromAccount,
+                    toAccount = toAccount,
+                    amount = amount,
+                    fee = fee,
+                    notes = notes,
+                    currentUser = _currentUser.value.fullName
+                )
+                showMessage("تم تنفيذ التحويل وتوليد سند القيد المحاسبي بنجاح")
+                onSuccess()
+            } catch (e: Exception) {
+                showMessage("خطأ: ${e.message}")
+            }
+        }
+    }
+
+    // --- Shift Settlements ---
+    fun openShift(openingCash: Double, onSuccess: () -> Unit = {}) {
+        viewModelScope.launch {
+            try {
+                repository.openShift(_currentUser.value.fullName, openingCash)
+                showMessage("تم فتح الوردية بنجاح")
+                onSuccess()
+            } catch (e: Exception) {
+                showMessage("خطأ: ${e.message}")
+            }
+        }
+    }
+
+    fun closeShift(
+        shift: ShiftRecord,
+        counts: Map<Int, Int>,
+        actualCash: Double,
+        notes: String = "",
+        onSuccess: () -> Unit = {}
+    ) {
+        viewModelScope.launch {
+            try {
+                repository.closeShift(shift, counts, actualCash, notes, _currentUser.value.fullName)
+                showMessage("تم إقفال الوردية واحتساب الفروقات بنجاح")
+                onSuccess()
+            } catch (e: Exception) {
+                showMessage("خطأ: ${e.message}")
+            }
+        }
+    }
+
+    // --- Installments ---
+    fun payInstallment(installment: InvoiceInstallment, amount: Double) {
+        viewModelScope.launch {
+            try {
+                repository.payInstallment(installment, amount, _currentUser.value.fullName)
+                showMessage("تم سداد القسط وتحديث رصيد العميل بنجاح")
+            } catch (e: Exception) {
+                showMessage("خطأ: ${e.message}")
+            }
+        }
+    }
+
+    // --- Purchase Orders ---
+    fun savePurchaseOrder(order: PurchaseOrder, onSuccess: () -> Unit = {}) {
+        viewModelScope.launch {
+            try {
+                if (order.id == 0L) {
+                    repository.insertPurchaseOrder(order)
+                    repository.logAudit("أمر شراء", "إنشاء أمر شراء ${order.orderNumber} للمورد ${order.supplierName}", _currentUser.value.fullName)
+                } else {
+                    repository.updatePurchaseOrder(order)
+                }
+                showMessage("تم حفظ أمر الشراء بنجاح")
+                onSuccess()
+            } catch (e: Exception) {
+                showMessage("خطأ: ${e.message}")
+            }
+        }
+    }
+
+    fun updatePurchaseOrderStatus(order: PurchaseOrder, newStatus: String) {
+        viewModelScope.launch {
+            try {
+                repository.updatePurchaseOrder(order.copy(status = newStatus))
+                showMessage("تم تحديث حالة أمر الشراء إلى: $newStatus")
+            } catch (e: Exception) {
+                showMessage("خطأ: ${e.message}")
+            }
+        }
+    }
+
+    fun deletePurchaseOrder(order: PurchaseOrder) {
+        viewModelScope.launch {
+            try {
+                repository.deletePurchaseOrder(order)
+                showMessage("تم حذف أمر الشراء")
+            } catch (e: Exception) {
+                showMessage("خطأ: ${e.message}")
+            }
         }
     }
 }

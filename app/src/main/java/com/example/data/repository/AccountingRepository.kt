@@ -1223,4 +1223,384 @@ class AccountingRepository(private val dao: AppDao) {
             user = currentUser
         )
     }
+
+    // ==========================================
+    // --- Chart of Accounts (دليل الحسابات الشجري) ---
+    // ==========================================
+    val allChartOfAccounts: Flow<List<ChartOfAccount>> = dao.getAllChartOfAccounts()
+
+    suspend fun seedDefaultChartOfAccountsIfNeeded() {
+        val existing = dao.getAllChartOfAccountsDirect()
+        if (existing.isEmpty()) {
+            val defaultAccounts = listOf(
+                // 1: الأصول
+                ChartOfAccount(code = "1", name = "الأصول", accountType = "ASSET", parentCode = "", level = 1),
+                ChartOfAccount(code = "11", name = "الأصول المتداولة", accountType = "ASSET", parentCode = "1", level = 2),
+                ChartOfAccount(code = "1101", name = "الصندوق الرئيسي (النقدية)", accountType = "ASSET", parentCode = "11", level = 3, isSubAccount = true),
+                ChartOfAccount(code = "1102", name = "البنك وحساب الشبكة / مدى", accountType = "ASSET", parentCode = "11", level = 3, isSubAccount = true),
+                ChartOfAccount(code = "1103", name = "العملاء (المدينون)", accountType = "ASSET", parentCode = "11", level = 3, isSubAccount = true),
+                ChartOfAccount(code = "1104", name = "مخزون بضاعة آخر المدة", accountType = "ASSET", parentCode = "11", level = 3, isSubAccount = true),
+                ChartOfAccount(code = "1105", name = "أوراق القبض وشيكات برسم التحصيل", accountType = "ASSET", parentCode = "11", level = 3, isSubAccount = true),
+                ChartOfAccount(code = "12", name = "الأصول الثابتة", accountType = "ASSET", parentCode = "1", level = 2),
+                ChartOfAccount(code = "1201", name = "أجهزة ومعدات ونقاط البيع", accountType = "ASSET", parentCode = "12", level = 3, isSubAccount = true),
+                ChartOfAccount(code = "1202", name = "أثاث وديكور المتجر", accountType = "ASSET", parentCode = "12", level = 3, isSubAccount = true),
+                ChartOfAccount(code = "1203", name = "سيارات ومركبات التوزيع", accountType = "ASSET", parentCode = "12", level = 3, isSubAccount = true),
+                ChartOfAccount(code = "1204", name = "مجمع إهلاك الأصول الثابتة (-)", accountType = "ASSET", parentCode = "12", level = 3, isSubAccount = true),
+
+                // 2: الخصوم والالتزامات
+                ChartOfAccount(code = "2", name = "الخصوم والالتزامات", accountType = "LIABILITY", parentCode = "", level = 1),
+                ChartOfAccount(code = "21", name = "الخصوم المتداولة", accountType = "LIABILITY", parentCode = "2", level = 2),
+                ChartOfAccount(code = "2101", name = "الموردون (الدائنون)", accountType = "LIABILITY", parentCode = "21", level = 3, isSubAccount = true),
+                ChartOfAccount(code = "2102", name = "أوراق دفع وشيكات صادرة آجلة", accountType = "LIABILITY", parentCode = "21", level = 3, isSubAccount = true),
+                ChartOfAccount(code = "2103", name = "أمانات ضريبة القيمة المضافة (VAT)", accountType = "LIABILITY", parentCode = "21", level = 3, isSubAccount = true),
+                ChartOfAccount(code = "2104", name = "مصروفات مستحقة الدفع", accountType = "LIABILITY", parentCode = "21", level = 3, isSubAccount = true),
+
+                // 3: حقوق الملكية
+                ChartOfAccount(code = "3", name = "حقوق الملكية", accountType = "EQUITY", parentCode = "", level = 1),
+                ChartOfAccount(code = "31", name = "رأس المال والاحتياطيات", accountType = "EQUITY", parentCode = "3", level = 2),
+                ChartOfAccount(code = "3101", name = "رأس مال المشروع", accountType = "EQUITY", parentCode = "31", level = 3, isSubAccount = true),
+                ChartOfAccount(code = "3102", name = "جاري المالك والمسحوبات الشخصية", accountType = "EQUITY", parentCode = "31", level = 3, isSubAccount = true),
+                ChartOfAccount(code = "3103", name = "الأرباح المدورة والمرحلة", accountType = "EQUITY", parentCode = "31", level = 3, isSubAccount = true),
+
+                // 4: الإيرادات
+                ChartOfAccount(code = "4", name = "الإيرادات", accountType = "REVENUE", parentCode = "", level = 1),
+                ChartOfAccount(code = "4101", name = "إيرادات المبيعات", accountType = "REVENUE", parentCode = "4", level = 2, isSubAccount = true),
+                ChartOfAccount(code = "4102", name = "مردودات ومسموحات المبيعات (-)", accountType = "REVENUE", parentCode = "4", level = 2, isSubAccount = true),
+                ChartOfAccount(code = "4103", name = "خصم مكتسب من الموردين", accountType = "REVENUE", parentCode = "4", level = 2, isSubAccount = true),
+                ChartOfAccount(code = "4104", name = "إيرادات أخرى وفروق عملة", accountType = "REVENUE", parentCode = "4", level = 2, isSubAccount = true),
+
+                // 5: المصروفات والتكاليف
+                ChartOfAccount(code = "5", name = "المصروفات والتكاليف", accountType = "EXPENSE", parentCode = "", level = 1),
+                ChartOfAccount(code = "5101", name = "تكلفة البضاعة المباعة (المشتريات)", accountType = "EXPENSE", parentCode = "5", level = 2, isSubAccount = true),
+                ChartOfAccount(code = "5102", name = "خصم مسموح به للعملاء", accountType = "EXPENSE", parentCode = "5", level = 2, isSubAccount = true),
+                ChartOfAccount(code = "5103", name = "إيجار المحل والمستودعات", accountType = "EXPENSE", parentCode = "5", level = 2, isSubAccount = true),
+                ChartOfAccount(code = "5104", name = "رواتب ومستحقات الموظفين", accountType = "EXPENSE", parentCode = "5", level = 2, isSubAccount = true),
+                ChartOfAccount(code = "5105", name = "كهرباء ومياه وخدمات إنترنت", accountType = "EXPENSE", parentCode = "5", level = 2, isSubAccount = true),
+                ChartOfAccount(code = "5106", name = "مصروفات صيانة وتشغيل", accountType = "EXPENSE", parentCode = "5", level = 2, isSubAccount = true),
+                ChartOfAccount(code = "5107", name = "إهلاك الأصول الثابتة", accountType = "EXPENSE", parentCode = "5", level = 2, isSubAccount = true),
+                ChartOfAccount(code = "5108", name = "مصروفات حكومية وتراخيص ورسوم", accountType = "EXPENSE", parentCode = "5", level = 2, isSubAccount = true)
+            )
+            dao.insertChartOfAccounts(defaultAccounts)
+        }
+    }
+
+    suspend fun insertChartOfAccount(account: ChartOfAccount): Long = dao.insertChartOfAccount(account)
+    suspend fun updateChartOfAccount(account: ChartOfAccount) = dao.updateChartOfAccount(account)
+    suspend fun deleteChartOfAccount(account: ChartOfAccount) = dao.deleteChartOfAccount(account)
+
+    // ==========================================
+    // --- Cost Centers (مراكز التكلفة) ---
+    // ==========================================
+    val allCostCenters: Flow<List<CostCenter>> = dao.getAllCostCenters()
+    suspend fun insertCostCenter(costCenter: CostCenter): Long = dao.insertCostCenter(costCenter)
+    suspend fun updateCostCenter(costCenter: CostCenter) = dao.updateCostCenter(costCenter)
+    suspend fun deleteCostCenter(costCenter: CostCenter) = dao.deleteCostCenter(costCenter)
+
+    // ==========================================
+    // --- Fixed Assets & Depreciation (الأصول الثابتة والإهلاك) ---
+    // ==========================================
+    val allFixedAssets: Flow<List<FixedAsset>> = dao.getAllFixedAssets()
+    suspend fun insertFixedAsset(asset: FixedAsset): Long {
+        val depreciableBase = Math.max(0.0, asset.purchasePrice - asset.salvageValue)
+        val months = Math.max(1, asset.usefulLifeYears * 12)
+        val monthlyDep = depreciableBase / months
+        val calculated = asset.copy(
+            monthlyDepreciation = monthlyDep,
+            bookValue = Math.max(asset.salvageValue, asset.purchasePrice - asset.accumulatedDepreciation)
+        )
+        return dao.insertFixedAsset(calculated)
+    }
+    suspend fun updateFixedAsset(asset: FixedAsset) = dao.updateFixedAsset(asset)
+    suspend fun deleteFixedAsset(asset: FixedAsset) = dao.deleteFixedAsset(asset)
+
+    suspend fun executeMonthlyDepreciation(asset: FixedAsset, currentUser: String): Boolean {
+        val newAccumulated = asset.accumulatedDepreciation + asset.monthlyDepreciation
+        val newBookValue = Math.max(asset.salvageValue, asset.purchasePrice - newAccumulated)
+        val updated = asset.copy(accumulatedDepreciation = newAccumulated, bookValue = newBookValue)
+        dao.updateFixedAsset(updated)
+
+        // Create Journal Voucher for Depreciation
+        val voucherNum = "JV-DEP-" + (System.currentTimeMillis() % 100000)
+        val vId = dao.insertJournalVoucher(
+            JournalVoucher(
+                voucherNumber = voucherNum,
+                narration = "إهلاك شهري للأصل: ${asset.name}",
+                totalDebit = asset.monthlyDepreciation,
+                totalCredit = asset.monthlyDepreciation,
+                isBalanced = true,
+                createdBy = currentUser
+            )
+        )
+        dao.insertJournalVoucherLines(
+            listOf(
+                JournalVoucherLine(voucherId = vId, accountCode = "5107", accountName = "مصروف إهلاك أصول ثابتة", partyType = "EXPENSE", debit = asset.monthlyDepreciation, description = "إهلاك شهري ${asset.name}"),
+                JournalVoucherLine(voucherId = vId, accountCode = "1204", accountName = "مجمع إهلاك ${asset.name}", partyType = "ASSET", credit = asset.monthlyDepreciation, description = "مجمع إهلاك ${asset.name}")
+            )
+        )
+        logAudit("إهلاك أصل", "تسجيل إهلاك شهري للأصل ${asset.name} بقيمة ${asset.monthlyDepreciation}", currentUser)
+        return true
+    }
+
+    // ==========================================
+    // --- Cheques / PDC (أوراق القبض والدفع) ---
+    // ==========================================
+    val allCheques: Flow<List<Cheque>> = dao.getAllCheques()
+    suspend fun insertCheque(cheque: Cheque): Long = dao.insertCheque(cheque)
+    suspend fun updateCheque(cheque: Cheque) = dao.updateCheque(cheque)
+    suspend fun deleteCheque(cheque: Cheque) = dao.deleteCheque(cheque)
+
+    suspend fun updateChequeStatus(cheque: Cheque, newStatus: String, currentUser: String) {
+        val oldStatus = cheque.status
+        dao.updateCheque(cheque.copy(status = newStatus))
+        if (newStatus == "COLLECTED" && oldStatus != "COLLECTED") {
+            // When cheque is collected:
+            if (cheque.chequeType == "RECEIVABLE") {
+                // Cash In
+                val currentCash = getLatestCashBalance()
+                dao.insertCashTransaction(
+                    CashTransaction(
+                        type = "IN",
+                        source = "CHEQUE_COLLECTED",
+                        referenceId = cheque.id,
+                        referenceNumber = cheque.chequeNumber,
+                        amount = cheque.amount,
+                        balanceAfter = currentCash + cheque.amount,
+                        notes = "تحصيل شيك ورقة قبض رقم ${cheque.chequeNumber} من ${cheque.partyName}",
+                        createdBy = currentUser
+                    )
+                )
+            } else {
+                // Payable Cheque paid
+                val currentCash = getLatestCashBalance()
+                dao.insertCashTransaction(
+                    CashTransaction(
+                        type = "OUT",
+                        source = "CHEQUE_PAID",
+                        referenceId = cheque.id,
+                        referenceNumber = cheque.chequeNumber,
+                        amount = cheque.amount,
+                        balanceAfter = currentCash - cheque.amount,
+                        notes = "صرف شيك ورقة دفع رقم ${cheque.chequeNumber} لـ ${cheque.partyName}",
+                        createdBy = currentUser
+                    )
+                )
+            }
+        }
+        logAudit("تحديث شيك", "تغيير حالة الشيك ${cheque.chequeNumber} إلى $newStatus", currentUser)
+    }
+
+    // ==========================================
+    // --- Inter-Account Transfers (التحويل بين الصناديق والبنوك) ---
+    // ==========================================
+    val allAccountTransfers: Flow<List<AccountTransfer>> = dao.getAllAccountTransfers()
+
+    suspend fun performAccountTransfer(
+        fromAccount: String,
+        toAccount: String,
+        amount: Double,
+        fee: Double,
+        notes: String,
+        currentUser: String
+    ): Long {
+        val transferNumber = "TRF-" + (System.currentTimeMillis() % 1000000)
+        val transferId = dao.insertAccountTransfer(
+            AccountTransfer(
+                transferNumber = transferNumber,
+                fromAccount = fromAccount,
+                toAccount = toAccount,
+                amount = amount,
+                transferFee = fee,
+                notes = notes,
+                createdBy = currentUser
+            )
+        )
+
+        // Cash effects
+        val totalOut = amount + fee
+        val currentCash = getLatestCashBalance()
+        if (fromAccount.contains("الصندوق")) {
+            dao.insertCashTransaction(
+                CashTransaction(
+                    type = "OUT",
+                    source = "ACCOUNT_TRANSFER",
+                    referenceId = transferId,
+                    referenceNumber = transferNumber,
+                    amount = totalOut,
+                    balanceAfter = currentCash - totalOut,
+                    notes = "تحويل من $fromAccount إلى $toAccount (رسوم: $fee)",
+                    createdBy = currentUser
+                )
+            )
+        }
+        if (toAccount.contains("الصندوق")) {
+            val updatedCash = getLatestCashBalance()
+            dao.insertCashTransaction(
+                CashTransaction(
+                    type = "IN",
+                    source = "ACCOUNT_TRANSFER",
+                    referenceId = transferId,
+                    referenceNumber = transferNumber,
+                    amount = amount,
+                    balanceAfter = updatedCash + amount,
+                    notes = "استلام تحويل من $fromAccount إلى $toAccount",
+                    createdBy = currentUser
+                )
+            )
+        }
+
+        // Generate matching Journal Voucher
+        val vId = dao.insertJournalVoucher(
+            JournalVoucher(
+                voucherNumber = "JV-$transferNumber",
+                narration = "تحويل مالي من $fromAccount إلى $toAccount: $notes",
+                totalDebit = totalOut,
+                totalCredit = totalOut,
+                isBalanced = true,
+                createdBy = currentUser
+            )
+        )
+        val lines = mutableListOf(
+            JournalVoucherLine(voucherId = vId, accountCode = "1102", accountName = toAccount, partyType = "BANK", debit = amount, description = "استلام تحويل"),
+            JournalVoucherLine(voucherId = vId, accountCode = "1101", accountName = fromAccount, partyType = "CASH", credit = amount, description = "صرف تحويل")
+        )
+        if (fee > 0) {
+            lines.add(JournalVoucherLine(voucherId = vId, accountCode = "5106", accountName = "عمولات ورسوم بنكية", partyType = "EXPENSE", debit = fee, description = "رسوم تحويل"))
+            lines.add(JournalVoucherLine(voucherId = vId, accountCode = "1101", accountName = fromAccount, partyType = "CASH", credit = fee, description = "صرف رسوم التحويل"))
+        }
+        dao.insertJournalVoucherLines(lines)
+        logAudit("تحويل مالي", "تحويل مبلغ $amount من $fromAccount إلى $toAccount", currentUser)
+        return transferId
+    }
+
+    // ==========================================
+    // --- Shift Settlement & Denominations Counter ---
+    // ==========================================
+    val allShifts: Flow<List<ShiftRecord>> = dao.getAllShifts()
+    suspend fun getCurrentOpenShift(): ShiftRecord? = dao.getCurrentOpenShift()
+
+    suspend fun openShift(userName: String, openingCash: Double): Long {
+        val shiftNum = "SH-" + (System.currentTimeMillis() % 1000000)
+        val shift = ShiftRecord(
+            shiftNumber = shiftNum,
+            openedBy = userName,
+            openingCash = openingCash,
+            expectedCash = openingCash,
+            status = "OPEN"
+        )
+        val id = dao.insertShift(shift)
+        logAudit("فتح وردية", "فتح وردية جديدة رقم $shiftNum بعهدة افتتاحية $openingCash", userName)
+        return id
+    }
+
+    suspend fun closeShift(
+        shift: ShiftRecord,
+        counts: Map<Int, Int>,
+        actualCash: Double,
+        notes: String,
+        currentUser: String
+    ): ShiftRecord {
+        val currentCash = getLatestCashBalance()
+        val expected = shift.openingCash + currentCash
+        val variance = actualCash - expected
+        val updated = shift.copy(
+            closedBy = currentUser,
+            endTime = System.currentTimeMillis(),
+            expectedCash = expected,
+            actualCash = actualCash,
+            variance = variance,
+            count500 = counts[500] ?: 0,
+            count200 = counts[200] ?: 0,
+            count100 = counts[100] ?: 0,
+            count50 = counts[50] ?: 0,
+            count20 = counts[20] ?: 0,
+            count10 = counts[10] ?: 0,
+            count5 = counts[5] ?: 0,
+            count1 = counts[1] ?: 0,
+            status = "CLOSED",
+            notes = notes
+        )
+        dao.updateShift(updated)
+        logAudit("إقفال وردية", "إقفال الوردية ${shift.shiftNumber} - الفارق: $variance", currentUser)
+        return updated
+    }
+
+    // ==========================================
+    // --- Installments (أقساط الفواتير) ---
+    // ==========================================
+    val allInstallments: Flow<List<InvoiceInstallment>> = dao.getAllInstallments()
+    fun getInstallmentsForInvoice(invoiceId: Long): Flow<List<InvoiceInstallment>> = dao.getInstallmentsForInvoice(invoiceId)
+
+    suspend fun generateInstallmentsForInvoice(
+        invoice: Invoice,
+        installmentsCount: Int,
+        firstDueDate: Long,
+        intervalDays: Int = 30
+    ) {
+        val count = Math.max(1, installmentsCount)
+        val eachAmount = invoice.totalAmount / count
+        val list = mutableListOf<InvoiceInstallment>()
+        for (i in 1..count) {
+            val dueDate = firstDueDate + ((i - 1) * intervalDays * 24L * 60L * 60L * 1000L)
+            list.add(
+                InvoiceInstallment(
+                    invoiceId = invoice.id,
+                    invoiceNumber = invoice.invoiceNumber,
+                    customerId = invoice.partyId,
+                    customerName = invoice.partyName,
+                    installmentNumber = i,
+                    dueDate = dueDate,
+                    amount = eachAmount,
+                    paidAmount = 0.0,
+                    status = "UNPAID"
+                )
+            )
+        }
+        dao.insertInstallments(list)
+    }
+
+    suspend fun payInstallment(installment: InvoiceInstallment, paidAmount: Double, currentUser: String) {
+        val totalPaid = installment.paidAmount + paidAmount
+        val newStatus = if (totalPaid >= installment.amount - 0.01) "PAID" else "PARTIAL"
+        val updated = installment.copy(
+            paidAmount = totalPaid,
+            status = newStatus,
+            paidDate = System.currentTimeMillis()
+        )
+        dao.updateInstallment(updated)
+
+        // Customer balance reduction
+        if (installment.customerId != null) {
+            val customer = dao.getCustomerById(installment.customerId)
+            if (customer != null) {
+                dao.updateCustomer(customer.copy(
+                    currentBalance = customer.currentBalance - paidAmount,
+                    totalPaid = customer.totalPaid + paidAmount
+                ))
+            }
+        }
+
+        // Cash In
+        val currentCash = getLatestCashBalance()
+        dao.insertCashTransaction(
+            CashTransaction(
+                type = "IN",
+                source = "INSTALLMENT_PAYMENT",
+                referenceId = installment.id,
+                referenceNumber = installment.invoiceNumber,
+                amount = paidAmount,
+                balanceAfter = currentCash + paidAmount,
+                notes = "سداد قسط رقم ${installment.installmentNumber} للفاتورة ${installment.invoiceNumber}",
+                createdBy = currentUser
+            )
+        )
+        logAudit("سداد قسط", "سداد قسط ${installment.installmentNumber} بقيمة $paidAmount للعميل ${installment.customerName}", currentUser)
+    }
+
+    // ==========================================
+    // --- Purchase Orders (أوامر الشراء) ---
+    // ==========================================
+    val allPurchaseOrders: Flow<List<PurchaseOrder>> = dao.getAllPurchaseOrders()
+    suspend fun insertPurchaseOrder(order: PurchaseOrder): Long = dao.insertPurchaseOrder(order)
+    suspend fun updatePurchaseOrder(order: PurchaseOrder) = dao.updatePurchaseOrder(order)
+    suspend fun deletePurchaseOrder(order: PurchaseOrder) = dao.deletePurchaseOrder(order)
 }

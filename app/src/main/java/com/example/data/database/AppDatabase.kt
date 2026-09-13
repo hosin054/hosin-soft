@@ -24,9 +24,17 @@ import com.example.data.model.*
         InventoryTransaction::class,
         AuditLog::class,
         JournalVoucher::class,
-        JournalVoucherLine::class
+        JournalVoucherLine::class,
+        ChartOfAccount::class,
+        CostCenter::class,
+        FixedAsset::class,
+        Cheque::class,
+        AccountTransfer::class,
+        ShiftRecord::class,
+        InvoiceInstallment::class,
+        PurchaseOrder::class
     ],
-    version = 4,
+    version = 5,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {

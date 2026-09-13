@@ -20,6 +20,8 @@ import androidx.navigation.navArgument
 import com.example.ui.MainViewModel
 import com.example.ui.screens.accounting.ClosingAccountsScreen
 import com.example.ui.screens.accounting.JournalVouchersScreen
+import com.example.ui.screens.accounting.ChartOfAccountsScreen
+import com.example.ui.screens.accounting.FinancialToolsScreen
 import com.example.ui.screens.cash.CashScreen
 import com.example.ui.screens.dashboard.DashboardScreen
 import com.example.ui.screens.expenses.ExpensesScreen
@@ -254,6 +256,20 @@ fun AppNavigation(viewModel: MainViewModel) {
                 )
             }
 
+            composable(Screen.ChartOfAccounts.route) {
+                ChartOfAccountsScreen(
+                    viewModel = viewModel,
+                    onNavigateBack = { navController.popBackStack() }
+                )
+            }
+
+            composable(Screen.FinancialTools.route) {
+                FinancialToolsScreen(
+                    viewModel = viewModel,
+                    onNavigateBack = { navController.popBackStack() }
+                )
+            }
+
             composable(Screen.Expenses.route) {
                 ExpensesScreen(viewModel = viewModel)
             }
@@ -266,7 +282,9 @@ fun AppNavigation(viewModel: MainViewModel) {
                 ReportsScreen(
                     viewModel = viewModel,
                     onNavigateToClosingAccounts = { navController.navigate(Screen.ClosingAccounts.route) },
-                    onNavigateToJournal = { navController.navigate(Screen.JournalVouchers.route) }
+                    onNavigateToJournal = { navController.navigate(Screen.JournalVouchers.route) },
+                    onNavigateToChartOfAccounts = { navController.navigate(Screen.ChartOfAccounts.route) },
+                    onNavigateToFinancialTools = { navController.navigate(Screen.FinancialTools.route) }
                 )
             }
 

@@ -276,4 +276,108 @@ interface AppDao {
 
     @Query("DELETE FROM journal_voucher_lines WHERE voucherId = :voucherId")
     suspend fun deleteJournalVoucherLinesByVoucherId(voucherId: Long)
+
+    // --- Chart of Accounts (دليل الحسابات الشجري) ---
+    @Query("SELECT * FROM chart_of_accounts ORDER BY code ASC")
+    fun getAllChartOfAccounts(): Flow<List<ChartOfAccount>>
+
+    @Query("SELECT * FROM chart_of_accounts ORDER BY code ASC")
+    suspend fun getAllChartOfAccountsDirect(): List<ChartOfAccount>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertChartOfAccount(account: ChartOfAccount): Long
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertChartOfAccounts(accounts: List<ChartOfAccount>)
+
+    @Update
+    suspend fun updateChartOfAccount(account: ChartOfAccount)
+
+    @Delete
+    suspend fun deleteChartOfAccount(account: ChartOfAccount)
+
+    // --- Cost Centers (مراكز التكلفة) ---
+    @Query("SELECT * FROM cost_centers ORDER BY code ASC")
+    fun getAllCostCenters(): Flow<List<CostCenter>>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertCostCenter(costCenter: CostCenter): Long
+
+    @Update
+    suspend fun updateCostCenter(costCenter: CostCenter)
+
+    @Delete
+    suspend fun deleteCostCenter(costCenter: CostCenter)
+
+    // --- Fixed Assets (الأصول الثابتة والإهلاك) ---
+    @Query("SELECT * FROM fixed_assets ORDER BY purchaseDate DESC")
+    fun getAllFixedAssets(): Flow<List<FixedAsset>>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertFixedAsset(asset: FixedAsset): Long
+
+    @Update
+    suspend fun updateFixedAsset(asset: FixedAsset)
+
+    @Delete
+    suspend fun deleteFixedAsset(asset: FixedAsset)
+
+    // --- Cheques / PDC (أوراق القبض والدفع والشيكات) ---
+    @Query("SELECT * FROM cheques ORDER BY dueDate ASC")
+    fun getAllCheques(): Flow<List<Cheque>>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertCheque(cheque: Cheque): Long
+
+    @Update
+    suspend fun updateCheque(cheque: Cheque)
+
+    @Delete
+    suspend fun deleteCheque(cheque: Cheque)
+
+    // --- Account Transfers (التحويل بين الصناديق والبنوك) ---
+    @Query("SELECT * FROM account_transfers ORDER BY transferDate DESC")
+    fun getAllAccountTransfers(): Flow<List<AccountTransfer>>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertAccountTransfer(transfer: AccountTransfer): Long
+
+    // --- Shift Records (إقفال الوردية وعد النقدية) ---
+    @Query("SELECT * FROM shift_records ORDER BY startTime DESC")
+    fun getAllShifts(): Flow<List<ShiftRecord>>
+
+    @Query("SELECT * FROM shift_records WHERE status = 'OPEN' ORDER BY startTime DESC LIMIT 1")
+    suspend fun getCurrentOpenShift(): ShiftRecord?
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertShift(shift: ShiftRecord): Long
+
+    @Update
+    suspend fun updateShift(shift: ShiftRecord)
+
+    // --- Invoice Installments (أقساط الفواتير) ---
+    @Query("SELECT * FROM invoice_installments ORDER BY dueDate ASC")
+    fun getAllInstallments(): Flow<List<InvoiceInstallment>>
+
+    @Query("SELECT * FROM invoice_installments WHERE invoiceId = :invoiceId ORDER BY installmentNumber ASC")
+    fun getInstallmentsForInvoice(invoiceId: Long): Flow<List<InvoiceInstallment>>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertInstallments(installments: List<InvoiceInstallment>)
+
+    @Update
+    suspend fun updateInstallment(installment: InvoiceInstallment)
+
+    // --- Purchase Orders (أوامر الشراء) ---
+    @Query("SELECT * FROM purchase_orders ORDER BY orderDate DESC")
+    fun getAllPurchaseOrders(): Flow<List<PurchaseOrder>>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertPurchaseOrder(order: PurchaseOrder): Long
+
+    @Update
+    suspend fun updatePurchaseOrder(order: PurchaseOrder)
+
+    @Delete
+    suspend fun deletePurchaseOrder(order: PurchaseOrder)
 }

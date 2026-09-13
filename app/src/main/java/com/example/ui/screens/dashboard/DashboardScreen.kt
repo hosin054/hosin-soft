@@ -63,6 +63,7 @@ fun DashboardScreen(
     var targetUserToSwitch by remember { mutableStateOf<User?>(null) }
     var pinInput by remember { mutableStateOf("") }
     var pinError by remember { mutableStateOf<String?>(null) }
+    var showSpotlightDialog by remember { mutableStateOf(false) }
 
     // Calculate dates
     val cal = Calendar.getInstance()
@@ -165,6 +166,9 @@ ${if (currentUser.canViewProfits) "📊 *صافي أرباح الشهر:* ${Form
                     }
                 },
                 actions = {
+                    IconButton(onClick = { showSpotlightDialog = true }) {
+                        Icon(Icons.Default.Search, contentDescription = "بحث عام وسريع", tint = MaterialTheme.colorScheme.onPrimary)
+                    }
                     IconButton(onClick = {
                         pinError = null
                         pinInput = ""
@@ -488,6 +492,40 @@ ${if (currentUser.canViewProfits) "📊 *صافي أرباح الشهر:* ${Form
                         modifier = Modifier.weight(1f)
                     )
                 }
+                Spacer(modifier = Modifier.height(8.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    QuickActionItem(
+                        icon = Icons.Default.AccountTree,
+                        label = "دليل الحسابات",
+                        color = Color(0xFF047857),
+                        onClick = { onNavigateTo(Screen.ChartOfAccounts.route) },
+                        modifier = Modifier.weight(1f)
+                    )
+                    QuickActionItem(
+                        icon = Icons.Default.AutoGraph,
+                        label = "أدوات ووردية",
+                        color = Color(0xFF7C3AED),
+                        onClick = { onNavigateTo(Screen.FinancialTools.route) },
+                        modifier = Modifier.weight(1f)
+                    )
+                    QuickActionItem(
+                        icon = Icons.Default.Description,
+                        label = "عروض الأسعار",
+                        color = Color(0xFFD97706),
+                        onClick = { onNavigateTo(Screen.Quotations.route) },
+                        modifier = Modifier.weight(1f)
+                    )
+                    QuickActionItem(
+                        icon = Icons.Default.QrCode,
+                        label = "ملصقات الباركود",
+                        color = Color(0xFF0284C7),
+                        onClick = { onNavigateTo(Screen.BarcodeLabels.route) },
+                        modifier = Modifier.weight(1f)
+                    )
+                }
             }
 
             // Main KPI Cards
@@ -515,6 +553,20 @@ ${if (currentUser.canViewProfits) "📊 *صافي أرباح الشهر:* ${Form
                         modifier = Modifier.weight(1f)
                     )
                 }
+            }
+
+            // Interactive 3D Donut Chart for Financial Flow Distribution
+            item {
+                Interactive3DDonutChart(
+                    segments = listOf(
+                        DonutSegment("المبيعات", salesThisMonth.coerceAtLeast(10.0), Color(0xFF10B981)),
+                        DonutSegment("المشتريات", purchasesThisMonth.coerceAtLeast(10.0), Color(0xFF3B82F6)),
+                        DonutSegment("المصروفات", expenses.sumOf { it.amount }.coerceAtLeast(5.0), Color(0xFFEF4444)),
+                        DonutSegment("نقدية الصندوق", currentCash.coerceAtLeast(10.0), Color(0xFFF59E0B))
+                    ),
+                    centerTitle = "حجم التدفقات",
+                    centerValue = Formatters.formatMoney(salesThisMonth, settings)
+                )
             }
 
             item {
@@ -801,6 +853,13 @@ ${if (currentUser.canViewProfits) "📊 *صافي أرباح الشهر:* ${Form
                 }
             )
         }
+    }
+
+    if (showSpotlightDialog) {
+        SpotlightCommandDialog(
+            onDismiss = { showSpotlightDialog = false },
+            onNavigate = { route -> onNavigateTo(route) }
+        )
     }
 }
 

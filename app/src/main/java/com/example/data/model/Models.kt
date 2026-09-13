@@ -64,6 +64,8 @@ data class Product(
     val purchasePrice: Double = 0.0, // Cost per main unit
     val cashSalePrice: Double = 0.0, // Cash sale price per main unit
     val creditSalePrice: Double = 0.0, // Credit sale price per main unit
+    val wholesalePrice: Double = 0.0, // Wholesale price per main unit
+    val distributorPrice: Double = 0.0, // Distributor special price
     val currentStockSubUnits: Double = 0.0, // Stored in subUnits for exact precision
     val minStockSubUnits: Double = 5.0,
     val supplierId: Long? = null,
@@ -258,4 +260,132 @@ data class JournalVoucherLine(
     val debit: Double = 0.0,
     val credit: Double = 0.0,
     val description: String = ""
+)
+
+@Entity(tableName = "chart_of_accounts")
+data class ChartOfAccount(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val code: String, // e.g. "1", "11", "1101"
+    val name: String,
+    val accountType: String, // ASSET, LIABILITY, EQUITY, REVENUE, EXPENSE
+    val parentCode: String = "",
+    val level: Int = 1,
+    val isSubAccount: Boolean = false,
+    val debitBalance: Double = 0.0,
+    val creditBalance: Double = 0.0,
+    val currentBalance: Double = 0.0,
+    val notes: String = "",
+    val isActive: Boolean = true
+)
+
+@Entity(tableName = "cost_centers")
+data class CostCenter(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val code: String,
+    val name: String,
+    val description: String = "",
+    val totalExpenses: Double = 0.0,
+    val totalRevenues: Double = 0.0,
+    val isActive: Boolean = true
+)
+
+@Entity(tableName = "fixed_assets")
+data class FixedAsset(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val code: String = "",
+    val name: String,
+    val category: String = "أجهزة ومعدات",
+    val purchaseDate: Long = System.currentTimeMillis(),
+    val purchasePrice: Double,
+    val salvageValue: Double = 0.0, // قيمة الخردة
+    val usefulLifeYears: Int = 5,
+    val accumulatedDepreciation: Double = 0.0, // مجمع الإهلاك
+    val bookValue: Double = purchasePrice, // القيمة الدفترية
+    val monthlyDepreciation: Double = 0.0,
+    val location: String = "المتجر الرئيسي",
+    val notes: String = ""
+)
+
+@Entity(tableName = "cheques")
+data class Cheque(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val chequeNumber: String,
+    val chequeType: String, // RECEIVABLE (ورقة قبض), PAYABLE (ورقة دفع)
+    val partyType: String = "CUSTOMER", // CUSTOMER, SUPPLIER, OTHER
+    val partyId: Long? = null,
+    val partyName: String,
+    val bankName: String,
+    val amount: Double,
+    val dueDate: Long,
+    val issueDate: Long = System.currentTimeMillis(),
+    val status: String = "PENDING", // PENDING (في الحافظة), COLLECTED (محصل), BOUNCED (مرتد), CANCELLED (ملغي)
+    val notes: String = ""
+)
+
+@Entity(tableName = "account_transfers")
+data class AccountTransfer(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val transferNumber: String,
+    val fromAccount: String, // الصندوق الرئيسي, البنك الأهلي, إلخ
+    val toAccount: String,
+    val amount: Double,
+    val transferFee: Double = 0.0,
+    val transferDate: Long = System.currentTimeMillis(),
+    val notes: String = "",
+    val createdBy: String = "مدير النظام"
+)
+
+@Entity(tableName = "shift_records")
+data class ShiftRecord(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val shiftNumber: String,
+    val openedBy: String,
+    val closedBy: String = "",
+    val startTime: Long = System.currentTimeMillis(),
+    val endTime: Long? = null,
+    val openingCash: Double = 0.0,
+    val systemSalesCash: Double = 0.0,
+    val systemPaymentsCash: Double = 0.0,
+    val expectedCash: Double = 0.0,
+    val actualCash: Double = 0.0,
+    val variance: Double = 0.0, // الفارق (عجز أو زيادة)
+    val count500: Int = 0,
+    val count200: Int = 0,
+    val count100: Int = 0,
+    val count50: Int = 0,
+    val count20: Int = 0,
+    val count10: Int = 0,
+    val count5: Int = 0,
+    val count1: Int = 0,
+    val status: String = "OPEN", // OPEN, CLOSED
+    val notes: String = ""
+)
+
+@Entity(tableName = "invoice_installments")
+data class InvoiceInstallment(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val invoiceId: Long,
+    val invoiceNumber: String = "",
+    val customerId: Long? = null,
+    val customerName: String = "",
+    val installmentNumber: Int,
+    val dueDate: Long,
+    val amount: Double,
+    val paidAmount: Double = 0.0,
+    val status: String = "UNPAID", // UNPAID, PARTIAL, PAID
+    val paidDate: Long? = null,
+    val notes: String = ""
+)
+
+@Entity(tableName = "purchase_orders")
+data class PurchaseOrder(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val orderNumber: String,
+    val supplierId: Long,
+    val supplierName: String,
+    val orderDate: Long = System.currentTimeMillis(),
+    val expectedDeliveryDate: Long? = null,
+    val totalAmount: Double = 0.0,
+    val status: String = "PENDING", // PENDING, APPROVED, RECEIVED, CANCELLED
+    val notes: String = ""
 )
